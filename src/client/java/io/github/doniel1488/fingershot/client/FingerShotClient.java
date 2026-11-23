@@ -78,7 +78,7 @@ public final class FingerShotClient implements ClientModInitializer {
 
     private static void receiveState(MinecraftClient client, ShotPackets.State packet) {
         if (packet.phase() == Phase.CHARGING || packet.phase() == Phase.FIRED) {
-            Pose newPose = new Pose(packet.phase(), tick, packet.chargeTicks(), packet.volume());
+            Pose newPose = new Pose(packet.phase(), tick - packet.elapsedTicks(), packet.chargeTicks(), packet.volume());
             POSES.put(packet.player(), newPose);
             if (packet.phase() == Phase.CHARGING && packet.volume() * config.volume > 0) {
                 client.getSoundManager().play(new ChargeSound(packet.player(), newPose, config.volume));

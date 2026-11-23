@@ -40,9 +40,13 @@ record CutFragments(BlockPos pos, Plane plane, Mesh mesh, int light, int born) {
         var directions = EnumSet.noneOf(Direction.class);
         for (BlockModelPart part : manager.getModel(state).getParts(random)) {
             for (Direction side : Direction.values()) {
-                addFaces(world, pos, state, part.getQuads(side), faces, directions);
+                if (!addFaces(world, pos, state, part.getQuads(side), faces, directions)) {
+                    return null;
+                }
             }
-            addFaces(world, pos, state, part.getQuads(null), faces, directions);
+            if (!addFaces(world, pos, state, part.getQuads(null), faces, directions)) {
+                return null;
+            }
         }
         // Only cap a closed unit cube. Resource packs can replace a tagged block's model.
         if (faces.size() != 6 || directions.size() != 6) {
@@ -53,14 +57,14 @@ record CutFragments(BlockPos pos, Plane plane, Mesh mesh, int light, int born) {
         return BlockSlice.split(faces, plane).map(mesh -> new CutFragments(pos, plane, mesh, light, tick)).orElse(null);
     }
 
-    private static void addFaces(ClientWorld world, BlockPos pos, BlockState state, List<BakedQuad> quads,
+    private static boolean addFaces(ClientWorld world, BlockPos pos, BlockState state, List<BakedQuad> quads,
                                  List<Face> faces, EnumSet<Direction> directions) {
         var colors = MinecraftClient.getInstance().getBlockColors();
         for (BakedQuad quad : quads) {
             int[] data = quad.vertexData();
             int stride = data.length / 4;
             if (stride < 6 || data.length % 4 != 0 || !directions.add(quad.face())) {
-                continue;
+                return false;
             }
             Vec3d normal = Vec3d.of(quad.face().getVector());
             int tint = quad.hasTint() ? colors.getColor(state, world, pos, quad.tintIndex()) : 0xFFFFFF;
@@ -72,7 +76,8 @@ record CutFragments(BlockPos pos, Plane plane, Mesh mesh, int light, int born) {
                 Vec3d point = new Vec3d(Float.intBitsToFloat(data[offset]),
                         Float.intBitsToFloat(data[offset + 1]), Float.intBitsToFloat(data[offset + 2]));
                 Vec3d corner = new Vec3d(Math.rint(point.x), Math.rint(point.y), Math.rint(point.z));
-                if (corner.squaredDistanceTo(point) > EPSILON * EPSILON
+                if (!Double.isFinite(point.lengthSquared())
+                        || corner.squaredDistanceTo(point) > EPSILON * EPSILON
                         || corner.x < 0 || corner.y < 0 || corner.z < 0
                         || corner.x > 1 || corner.y > 1 || corner.z > 1
                         || Math.abs(corner.subtract(BlockSlice.CENTER).dotProduct(normal) - 0.5) > EPSILON
@@ -85,10 +90,12 @@ record CutFragments(BlockPos pos, Plane plane, Mesh mesh, int light, int born) {
                         component(rgba, 8) * component(tint, 8) * shade,
                         component(rgba, 16) * component(tint, 0) * shade, component(rgba, 24)));
             }
-            if (vertices.size() == 4) {
-                faces.add(new Face(List.copyOf(vertices), normal, quad.lightEmission()));
+            if (vertices.size() != 4) {
+                return false;
             }
+            faces.add(new Face(List.copyOf(vertices), normal, quad.lightEmission()));
         }
+        return true;
     }
 
     private static float component(int color, int shift) {

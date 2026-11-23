@@ -22,7 +22,7 @@ public final class ShotPackets {
         @Override public Id<Input> getId() { return ID; }
     }
 
-    public record State(int player, Phase phase, int chargeTicks, int cooldownTicks, float volume)
+    public record State(int player, Phase phase, int chargeTicks, int elapsedTicks, int cooldownTicks, float volume)
             implements CustomPayload {
         public static final Id<State> ID = new Id<>(FingerShot.id("state"));
         public static final PacketCodec<RegistryByteBuf, State> CODEC = PacketCodec.of(
@@ -30,11 +30,12 @@ public final class ShotPackets {
                     buf.writeVarInt(state.player);
                     buf.writeEnumConstant(state.phase);
                     buf.writeVarInt(state.chargeTicks);
+                    buf.writeVarInt(state.elapsedTicks);
                     buf.writeVarInt(state.cooldownTicks);
                     buf.writeFloat(state.volume);
                 },
                 buf -> new State(buf.readVarInt(), buf.readEnumConstant(Phase.class),
-                        buf.readVarInt(), buf.readVarInt(), buf.readFloat()));
+                        buf.readVarInt(), buf.readVarInt(), buf.readVarInt(), buf.readFloat()));
 
         @Override public Id<State> getId() { return ID; }
     }

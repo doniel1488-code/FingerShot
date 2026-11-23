@@ -2,11 +2,14 @@ package io.github.doniel1488.fingershot.client;
 
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
+import net.fabricmc.fabric.api.client.gametest.v1.screenshot.TestScreenshotOptions;
 import net.minecraft.block.Blocks;
 import net.minecraft.client.option.Perspective;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
 import org.lwjgl.glfw.GLFW;
+
+import java.nio.file.Path;
 
 @SuppressWarnings("UnstableApiUsage")
 public final class ShotClientGameTest implements FabricClientGameTest {
@@ -42,10 +45,10 @@ public final class ShotClientGameTest implements FabricClientGameTest {
                     throw new AssertionError("Holding the bound key must reach full charge");
                 }
             });
-            context.takeScreenshot("fingershot-first-person-charge");
+            capture(context, "fingershot-first-person-charge");
             context.runOnClient(client -> client.options.setPerspective(Perspective.THIRD_PERSON_BACK));
             context.waitTicks(2);
-            context.takeScreenshot("fingershot-third-person-charge");
+            capture(context, "fingershot-third-person-charge");
             context.runOnClient(client -> client.options.setPerspective(Perspective.FIRST_PERSON));
             context.getInput().releaseKey(GLFW.GLFW_KEY_R);
             context.waitTicks(5);
@@ -54,7 +57,16 @@ public final class ShotClientGameTest implements FabricClientGameTest {
                     throw new AssertionError("Releasing the key must slice the target block");
                 }
             });
-            context.takeScreenshot("fingershot-cut");
+            capture(context, "fingershot-cut");
         }
+    }
+
+    private static void capture(ClientGameTestContext context, String name) {
+        var options = TestScreenshotOptions.of(name).disableCounterPrefix();
+        String directory = System.getenv("FINGERSHOT_CAPTURE_DIR");
+        if (directory != null) {
+            options = options.withDestinationDir(Path.of(directory));
+        }
+        context.takeScreenshot(options);
     }
 }

@@ -6,6 +6,7 @@ import io.github.doniel1488.fingershot.net.ShotPackets.Phase;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.entity.event.v1.ServerEntityWorldChangeEvents;
+import net.fabricmc.fabric.api.networking.v1.EntityTrackingEvents;
 import net.fabricmc.fabric.api.networking.v1.PlayerLookup;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
@@ -44,6 +45,14 @@ public final class ShotServer {
                 sync(player, Phase.CANCELLED, session);
             }
         });
+        EntityTrackingEvents.START_TRACKING.register((entity, watcher) -> {
+            if (entity instanceof ServerPlayerEntity shooter) {
+                ChargeSession session = SESSIONS.get(shooter.getUuid());
+                if (session != null && session.elapsedCharge(tick) >= 0) {
+                    send(watcher, state(shooter, Phase.CHARGING, session));
+                }
+            }
+        });
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) ->
                 send(handler.player, state(handler.player, Phase.READY, new ChargeSession())));
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) ->
@@ -75,7 +84,7 @@ public final class ShotServer {
 
     private static ShotPackets.State state(ServerPlayerEntity player, Phase phase, ChargeSession session) {
         return new ShotPackets.State(player.getId(), phase, config.chargeTicks,
-                session.remainingCooldown(tick), config.volume);
+                Math.max(0, session.elapsedCharge(tick)), session.remainingCooldown(tick), config.volume);
     }
 
     private static void sync(ServerPlayerEntity player, Phase phase, ChargeSession session) {

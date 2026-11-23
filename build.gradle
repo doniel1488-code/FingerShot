@@ -48,3 +48,10 @@ fabricApi {
         eula = true
     }
 }
+
+// The server game-test run directory is recreated by Loom for every run.
+tasks.withType(JavaExec).configureEach {
+    if (name == 'runGameTest') {
+        doFirst { new File(workingDir, 'server.properties').createNewFile() }
+    }
+}

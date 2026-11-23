@@ -58,6 +58,10 @@ final class ChargeSession {
         return charging;
     }
 
+    int elapsedCharge(long tick) {
+        return start < 0 ? -1 : (int) (tick - start);
+    }
+
     boolean expired(long tick) {
         return start >= 0 && tick - start >= MAX_HOLD_TICKS;
     }

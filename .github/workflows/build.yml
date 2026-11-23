@@ -21,15 +21,20 @@ jobs:
           name: fingershot-fabric
           path: build/libs/fingershot-*.jar
           if-no-files-found: error
+      - name: Install Minecraft narrator library
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends flite1-dev
       - name: Run Minecraft client smoke test
         env:
           ALSOFT_DRIVERS: 'null'
           LIBGL_ALWAYS_SOFTWARE: 'true'
+          FINGERSHOT_CAPTURE_DIR: ${{ github.workspace }}/build/fingershot-captures
         run: xvfb-run -a ./gradlew runClientGameTest
       - name: Upload gameplay captures
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: fingershot-gameplay
-          path: build/run/clientGameTest/screenshots/fingershot-*.png
-          if-no-files-found: warn
+          path: build/fingershot-captures/fingershot-*.png
+          if-no-files-found: error
