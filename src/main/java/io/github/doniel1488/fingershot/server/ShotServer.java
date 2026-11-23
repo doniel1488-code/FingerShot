@@ -59,7 +59,10 @@ public final class ShotServer {
             case CANCEL -> sync(player, Phase.CANCELLED, session);
             case FIRE -> {
                 sync(player, Phase.FIRED, session);
-                ShotRay.fire(player, config, session.power());
+                var shot = ShotRay.fire(player, config, session.power());
+                if (shot != null) {
+                    broadcast(player, shot);
+                }
             }
             case REJECT -> send(player, state(player, Phase.CANCELLED, session));
             case IGNORE -> { }

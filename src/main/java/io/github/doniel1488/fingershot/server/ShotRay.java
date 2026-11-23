@@ -25,12 +25,12 @@ final class ShotRay {
 
     private record Target(LivingEntity entity, Vec3d point) {}
 
-    static void fire(ServerPlayerEntity player, ShotConfig config, float power) {
+    static ShotPackets.Beam fire(ServerPlayerEntity player, ShotConfig config, float power) {
         ServerWorld world = player.getWorld();
         Vec3d eye = player.getEyePos();
         Vec3d direction = player.getRotationVec(1.0f).normalize();
         if (!finite(eye) || !finite(direction) || direction.lengthSquared() < 0.99) {
-            return;
+            return null;
         }
 
         Vec3d max = eye.add(direction.multiply(config.range));
@@ -60,8 +60,8 @@ final class ShotRay {
                 impact = Impact.SLICE;
             }
         }
-        ShotServer.broadcast(player, new ShotPackets.Beam(player.getId(), eye, end, impact,
-                blockPos, stateId, power, config.volume));
+        return new ShotPackets.Beam(player.getId(), eye, end, impact,
+                blockPos, stateId, power, config.volume);
     }
 
     private static Target findTarget(ServerWorld world, ServerPlayerEntity shooter, Vec3d from, Vec3d to) {
@@ -88,7 +88,7 @@ final class ShotRay {
                 && state.getFluidState().isEmpty()
                 && !state.hasBlockEntity()
                 && state.getHardness(world, pos) >= 0
-                && world.canPlayerModifyAt(player, pos)
+                && world.canEntityModifyAt(player, pos)
                 && player.interactionManager.tryBreakBlock(pos)
                 && world.getBlockState(pos) != state;
     }

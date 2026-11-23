@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "fingershot-gametest",
+  "version": "1.0.0",
+  "name": "FingerShot Game Tests",
+  "environment": "*",
+  "entrypoints": {
+    "fabric-gametest": ["io.github.doniel1488.fingershot.server.ShotGameTest"],
+    "fabric-client-gametest": ["io.github.doniel1488.fingershot.client.ShotClientGameTest"]
+  },
+  "depends": {"fingershot": "*"}
+}
