@@ -8,6 +8,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -15,7 +16,7 @@ jobs:
           distribution: temurin
           java-version: '21'
       - uses: gradle/actions/setup-gradle@v4
-      - run: ./gradlew build
+      - run: ./gradlew --no-daemon --console=plain build
       - uses: actions/upload-artifact@v4
         with:
           name: fingershot-fabric
@@ -30,7 +31,7 @@ jobs:
           ALSOFT_DRIVERS: 'null'
           LIBGL_ALWAYS_SOFTWARE: 'true'
           FINGERSHOT_CAPTURE_DIR: ${{ github.workspace }}/build/fingershot-captures
-        run: xvfb-run -a ./gradlew runClientGameTest
+        run: xvfb-run -a ./gradlew --no-daemon --console=plain runClientGameTest
       - name: Upload gameplay captures
         if: success()
         uses: actions/upload-artifact@v4
