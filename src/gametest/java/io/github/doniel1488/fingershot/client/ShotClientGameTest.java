@@ -14,6 +14,8 @@ import java.nio.file.Path;
 @SuppressWarnings("UnstableApiUsage")
 public final class ShotClientGameTest implements FabricClientGameTest {
     private static final BlockPos TARGET = new BlockPos(1, 121, 5);
+    private static final BlockPos REAR = new BlockPos(1, 121, 9);
+    private static final BlockPos OUTSIDE = new BlockPos(3, 121, 8);
 
     @Override
     public void runTest(ClientGameTestContext context) {
@@ -22,7 +24,8 @@ public final class ShotClientGameTest implements FabricClientGameTest {
             server.runCommand("gamerule doMobSpawning false");
             server.runCommand("fill -5 120 -9 8 125 9 minecraft:air");
             server.runCommand("fill -5 119 -9 8 119 9 minecraft:smooth_stone");
-            server.runCommand("setblock 1 121 5 minecraft:cobblestone");
+            server.runCommand("fill 0 120 5 3 124 9 minecraft:cobblestone");
+            server.runCommand("setblock 1 121 13 minecraft:bedrock");
             server.runCommand("tp @a 1.5 120 0.5 0 0");
             server.runCommand("give @a minecraft:iron_pickaxe");
             world.getClientWorld().waitForChunksRender();
@@ -53,8 +56,9 @@ public final class ShotClientGameTest implements FabricClientGameTest {
             context.getInput().releaseKey(GLFW.GLFW_KEY_R);
             context.waitTicks(5);
             context.runOnClient(client -> {
-                if (!client.world.getBlockState(TARGET).isAir()) {
-                    throw new AssertionError("Releasing the key must slice the target block");
+                if (!client.world.getBlockState(TARGET).isAir() || !client.world.getBlockState(REAR).isAir()
+                        || !client.world.getBlockState(OUTSIDE).isOf(Blocks.COBBLESTONE)) {
+                    throw new AssertionError("Releasing the key must open a tunnel through the wall without deleting blocks outside it");
                 }
             });
             capture(context, "fingershot-cut");

@@ -12,6 +12,7 @@ import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.network.packet.CustomPayload;
 import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.util.math.Vec3d;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -70,7 +71,7 @@ public final class ShotServer {
                 sync(player, Phase.FIRED, session);
                 var shot = ShotRay.fire(player, config, session.power());
                 if (shot != null) {
-                    broadcast(player, shot);
+                    sendBeam(player, shot);
                 }
             }
             case REJECT -> send(player, state(player, Phase.CANCELLED, session));
@@ -96,6 +97,18 @@ public final class ShotServer {
         for (ServerPlayerEntity watcher : PlayerLookup.tracking(player)) {
             if (watcher != player) {
                 send(watcher, packet);
+            }
+        }
+    }
+
+    private static void sendBeam(ServerPlayerEntity shooter, ShotPackets.Beam shot) {
+        Vec3d segment = shot.end().subtract(shot.start());
+        double lengthSquared = segment.lengthSquared();
+        for (ServerPlayerEntity viewer : PlayerLookup.world(shooter.getWorld())) {
+            Vec3d offset = viewer.getEyePos().subtract(shot.start());
+            double t = lengthSquared > 0 ? Math.clamp(offset.dotProduct(segment) / lengthSquared, 0, 1) : 0;
+            if (viewer == shooter || offset.squaredDistanceTo(segment.multiply(t)) <= 96 * 96) {
+                send(viewer, shot);
             }
         }
     }

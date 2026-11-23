@@ -48,6 +48,31 @@ final class EnergyRender {
         }
     }
 
+    static void sphere(VertexConsumer out, MatrixStack.Entry entry, Vec3d center, double radius, int color) {
+        int rings = 8;
+        int sides = 12;
+        for (int ring = 0; ring < rings; ring++) {
+            double low = Math.PI * ring / rings;
+            double high = Math.PI * (ring + 1) / rings;
+            for (int side = 0; side < sides; side++) {
+                double left = Math.TAU * side / sides;
+                double right = Math.TAU * (side + 1) / sides;
+                Vec3d a = spherePoint(low, left);
+                Vec3d b = spherePoint(low, right);
+                Vec3d c = spherePoint(high, right);
+                Vec3d d = spherePoint(high, left);
+                quad(out, entry, center.add(a.multiply(radius)), center.add(b.multiply(radius)),
+                        center.add(c.multiply(radius)), center.add(d.multiply(radius)), color,
+                        a.add(b).add(c).add(d).normalize());
+            }
+        }
+    }
+
+    private static Vec3d spherePoint(double latitude, double longitude) {
+        double width = Math.sin(latitude);
+        return new Vec3d(width * Math.cos(longitude), Math.cos(latitude), width * Math.sin(longitude));
+    }
+
     static Vec3d perpendicular(Vec3d direction) {
         Vec3d axis = Math.abs(direction.y) > 0.94 ? new Vec3d(0, 0, 1) : new Vec3d(0, 1, 0);
         return direction.crossProduct(axis).normalize();

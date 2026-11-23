@@ -26,15 +26,15 @@ import java.util.ArrayDeque;
 import java.util.Deque;
 
 final class ShotEffects {
-    private static final int BEAM_LIFETIME = 12;
+    private static final int BEAM_LIFETIME = 17;
     private static final int MAX_BEAMS = 48;
     private static final Deque<Beam> BEAMS = new ArrayDeque<>();
     private static final Deque<CutFragments> FRAGMENTS = new ArrayDeque<>();
-    private static final DustParticleEffect CYAN = new DustParticleEffect(0x5BEFFF, 0.75f);
-    private static final DustParticleEffect VIOLET = new DustParticleEffect(0xA383FF, 0.6f);
+    private static final DustParticleEffect MAGENTA = new DustParticleEffect(0xEA59FF, 0.75f);
+    private static final DustParticleEffect VIOLET = new DustParticleEffect(0x8538FF, 0.6f);
     private static final Random RANDOM = Random.create();
 
-    private record Beam(Vec3d start, Vec3d end, Vec3d direction, int born, float power,
+    private record Beam(Vec3d start, Vec3d end, Vec3d direction, int born, float radius,
                         double intensity, float volume, Impact impact) {}
 
     static Vec3d handPosition(Entity entity, Vec3d eye, Vec3d direction) {
@@ -57,7 +57,7 @@ final class ShotEffects {
         int count = Math.max(1, (int) (config.effects * (1 + 3 * progress)));
         for (int i = 0; i < count; i++) {
             Vec3d offset = noise(0.27 + progress * 0.18);
-            particle(world, i % 2 == 0 ? CYAN : VIOLET, hand.add(offset), offset.multiply(-0.22));
+            particle(world, i % 2 == 0 ? MAGENTA : VIOLET, hand.add(offset), offset.multiply(-0.22));
         }
         if (progress > 0.75 && tick % 4 == 0) {
             particle(world, ParticleTypes.ELECTRIC_SPARK, hand, noise(0.13));
@@ -75,41 +75,45 @@ final class ShotEffects {
         if (BEAMS.size() >= MAX_BEAMS) {
             BEAMS.removeFirst();
         }
-        BEAMS.addLast(new Beam(start, shot.end(), direction, tick, shot.power(), config.effects, volume, shot.impact()));
+        BEAMS.addLast(new Beam(start, shot.end(), direction, tick, shot.radius(), config.effects, volume, shot.impact()));
 
         if (shot.impact() == Impact.ENTITY) {
-            sound(world, shot.end(), ShotSounds.ENTITY, volume * 0.85f, 1);
+            sound(world, start, ShotSounds.ENTITY, volume * 0.8f, 0.8f);
         } else if (shot.impact() != Impact.AIR) {
-            sound(world, shot.end(), ShotSounds.BLOCK, volume * 0.8f, 1);
+            Vec3d soundPoint = shot.fragments().isEmpty() ? shot.end() : Vec3d.ofCenter(shot.fragments().getFirst().pos());
+            sound(world, soundPoint, ShotSounds.BLOCK, volume * 0.9f, 0.68f);
         }
-        if (shot.impact() != Impact.AIR) {
-            var state = Block.getStateFromRawId(shot.blockState());
-            if (shot.impact() == Impact.SLICE) {
-                var fragments = CutFragments.create(world, shot.block(), state, shot.end(), direction, tick);
-                if (fragments != null) {
-                    while (FRAGMENTS.size() * 2 + 2 > config.maxFragments) {
-                        FRAGMENTS.removeFirst();
-                    }
-                    FRAGMENTS.addLast(fragments);
-                }
+
+        for (ShotPackets.Fragment fragment : shot.fragments()) {
+            var pos = fragment.pos();
+            if (!world.isChunkLoaded(pos)) {
+                continue;
             }
-            impactParticles(world, shot, state, config.effects);
+            BlockState state = Block.getStateFromRawId(fragment.state());
+            Vec3d center = Vec3d.ofCenter(pos);
+            Vec3d hit = shot.start().add(direction.multiply(center.subtract(shot.start()).dotProduct(direction)));
+            var pieces = CutFragments.create(world, pos, state, hit, direction, tick);
+            if (pieces != null) {
+                while (FRAGMENTS.size() * 2 + 2 > config.maxFragments) {
+                    FRAGMENTS.removeFirst();
+                }
+                FRAGMENTS.addLast(pieces);
+            }
+            impactParticles(world, center, state, config.effects);
+        }
+        if (config.effects > 0) {
+            particle(world, ParticleTypes.FLASH, start, Vec3d.ZERO);
         }
     }
 
-    private static void impactParticles(ClientWorld world, ShotPackets.Beam shot, BlockState state, double effects) {
-        int count = (int) (effects * (8 + shot.power() * 14));
+    private static void impactParticles(ClientWorld world, Vec3d point, BlockState state, double effects) {
         boolean wood = state.isIn(BlockTags.PLANKS) || state.isIn(BlockTags.LOGS);
         boolean soil = state.isIn(BlockTags.DIRT);
-        boolean entity = shot.impact() == Impact.ENTITY;
         ParticleEffect chips = new BlockStateParticleEffect(ParticleTypes.BLOCK, state);
-        for (int i = 0; i < count; i++) {
-            ParticleEffect material = entity || state.isAir() ? CYAN : i % 3 != 0 ? chips
+        for (int index = 0; index < (int) (effects * 8); index++) {
+            ParticleEffect material = index % 3 != 0 ? chips
                     : wood ? ParticleTypes.ELECTRIC_SPARK : soil ? ParticleTypes.POOF : ParticleTypes.SMOKE;
-            particle(world, material, shot.end().add(noise(0.24)), noise(wood ? 0.21 : 0.13).add(0, 0.045, 0));
-        }
-        if (effects > 0) {
-            particle(world, ParticleTypes.FLASH, shot.end(), Vec3d.ZERO);
+            particle(world, material, point.add(noise(0.38)), noise(0.18).add(0, 0.045, 0));
         }
     }
 
@@ -154,22 +158,29 @@ final class ShotEffects {
             return;
         }
         float fade = 1 - age / BEAM_LIFETIME;
-        double radius = (0.05 + 0.105 * beam.power) * (0.35 + 0.65 * fade) * Math.min(1.4, beam.intensity);
+        double radius = beam.radius * (0.18 + fade * 0.26) * Math.min(1.35, beam.intensity);
         Vec3d local = beam.start.subtract(camera);
         Vec3d end = beam.end.subtract(beam.start);
+        double traveled = Math.clamp((age + 0.7) / 10, 0, 1);
+        Vec3d head = end.multiply(traveled);
         matrices.push();
         matrices.translate(local.x, local.y, local.z);
         var entry = matrices.peek();
-        EnergyRender.tube(glow, entry, Vec3d.ZERO, end, radius * 1.9, radius * 1.35, 7,
-                EnergyRender.color(0.37f, 0.24f, 1, fade * 0.25f));
-        EnergyRender.tube(glow, entry, Vec3d.ZERO, end, radius, radius * 0.75, 7,
-                EnergyRender.color(0.08f, 0.84f, 1, fade * 0.65f));
-        EnergyRender.tube(glow, entry, Vec3d.ZERO, end, radius * 0.36, radius * 0.25, 6,
-                EnergyRender.color(0.88f, 1, 1, fade * 0.99f));
+        EnergyRender.tube(glow, entry, Vec3d.ZERO, head, radius * 0.20, radius * 2.2, 10,
+                EnergyRender.color(0.34f, 0.06f, 1, fade * 0.26f));
+        EnergyRender.tube(glow, entry, Vec3d.ZERO, head, radius * 0.12, radius, 9,
+                EnergyRender.color(0.75f, 0.14f, 1, fade * 0.65f));
+        EnergyRender.tube(glow, entry, Vec3d.ZERO, head, radius * 0.06, radius * 0.35, 8,
+                EnergyRender.color(1, 0.71f, 1, fade * 0.92f));
+
         if (beam.direction.lengthSquared() > 0.5) {
-            renderArcs(glow, entry, beam, end, radius, age, fade);
-            if (beam.impact != Impact.AIR) {
-                renderShockwave(glow, entry, end, beam.direction, age, fade);
+            renderArcs(glow, entry, beam, head, radius, age, fade);
+            double orb = beam.radius * (0.47 + 0.53 * fade) * Math.min(1.35, beam.intensity);
+            EnergyRender.sphere(glow, entry, head, orb, EnergyRender.color(0.48f, 0.06f, 1, fade * 0.38f));
+            EnergyRender.sphere(glow, entry, head, orb * 0.66, EnergyRender.color(0.86f, 0.15f, 1, fade * 0.66f));
+            EnergyRender.sphere(glow, entry, head, orb * 0.40, EnergyRender.color(1, 0.75f, 1, fade * 0.91f));
+            if (traveled >= 1 && beam.impact != Impact.AIR) {
+                renderShockwave(glow, entry, end, beam.direction, age - 9, fade);
             }
         }
         matrices.pop();
@@ -187,7 +198,7 @@ final class ShotEffects {
             Vec3d next = end.multiply(t).add(EnergyRender.around(u, v, angle)
                     .multiply(radius * (1.65 + (step % 3) * 0.45) * Math.sin(Math.PI * t)));
             EnergyRender.tube(glow, entry, previous, next, radius * 0.10, radius * 0.10, 3,
-                    EnergyRender.color(0.66f, 0.83f, 1, fade * 0.75f));
+                    EnergyRender.color(0.88f, 0.42f, 1, fade * 0.75f));
             previous = next;
         }
     }
@@ -199,7 +210,7 @@ final class ShotEffects {
         Vec3d origin = center.subtract(direction.multiply(0.06));
         double outer = 0.12 + age * 0.12;
         double inner = outer - 0.05 * fade;
-        int color = EnergyRender.color(0.45f, 0.85f, 1, fade * 0.7f);
+        int color = EnergyRender.color(0.76f, 0.35f, 1, fade * 0.7f);
         for (int i = 0; i < 20; i++) {
             Vec3d a = EnergyRender.around(u, v, i * Math.PI / 10);
             Vec3d b = EnergyRender.around(u, v, (i + 1) * Math.PI / 10);

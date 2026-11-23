@@ -51,15 +51,51 @@ public final class ShotGameTest {
     }
 
     @GameTest
-    public void hitsAnEntityBeforeTheBlock(TestContext context) {
+    public void carvesMultipleLayersAndHitsTargetsBehindThem(TestContext context) {
         var shooter = shooter(context);
+        BlockPos rear = new BlockPos(2, 2, 6);
+        BlockPos side = new BlockPos(3, 2, 5);
+        BlockPos outside = new BlockPos(5, 2, 5);
         context.setBlockState(BLOCK, Blocks.COBBLESTONE);
-        var pig = context.spawnEntity(EntityType.PIG, new Vec3d(2.5, 2, 3.3));
-        float health = pig.getHealth();
-        var result = ShotRay.fire(shooter, new ShotConfig(), 0.5f);
-        context.assertTrue(result != null && result.impact() == Impact.ENTITY, Text.literal("Expected an entity hit"));
-        context.assertEquals(health - 6, pig.getHealth(), Text.literal("Half charge must deal half damage"));
+        context.setBlockState(rear, Blocks.OBSIDIAN);
+        context.setBlockState(side, Blocks.STONE_BRICKS);
+        context.setBlockState(outside, Blocks.STONE);
+
+        var front = context.spawnEntity(EntityType.PIG, new Vec3d(2.5, 2, 2.8));
+        var back = context.spawnEntity(EntityType.PIG, new Vec3d(2.5, 2, 7.2));
+        ShotConfig config = new ShotConfig();
+        config.damage = 6;
+        float frontHealth = front.getHealth();
+        float backHealth = back.getHealth();
+        var result = ShotRay.fire(shooter, config, 1);
+
+        context.assertTrue(result != null && result.impact() == Impact.SLICE, Text.literal("Expected a cut through terrain"));
+        context.expectBlock(Blocks.AIR, BLOCK);
+        context.expectBlock(Blocks.AIR, rear);
+        context.expectBlock(Blocks.AIR, side);
+        context.expectBlock(Blocks.STONE, outside);
+        context.assertEquals(frontHealth - 6, front.getHealth(), Text.literal("Front target must be hit once"));
+        context.assertEquals(backHealth - 6, back.getHealth(), Text.literal("Rear target must be hit once"));
+        context.complete();
+    }
+
+    @GameTest
+    public void stopsAtBedrockAndRespectsBlockToggle(TestContext context) {
+        var shooter = shooter(context);
+        BlockPos rear = new BlockPos(2, 2, 6);
+        context.setBlockState(BLOCK, Blocks.BEDROCK);
+        context.setBlockState(rear, Blocks.STONE);
+        ShotRay.fire(shooter, new ShotConfig(), 1);
+        context.expectBlock(Blocks.BEDROCK, BLOCK);
+        context.expectBlock(Blocks.STONE, rear);
+
+        context.setBlockState(BLOCK, Blocks.COBBLESTONE);
+        ShotConfig config = new ShotConfig();
+        config.sliceBlocks = false;
+        var result = ShotRay.fire(shooter, config, 1);
+        context.assertTrue(result != null && result.impact() == Impact.BLOCK, Text.literal("Expected a solid impact"));
         context.expectBlock(Blocks.COBBLESTONE, BLOCK);
+        context.expectBlock(Blocks.STONE, rear);
         context.complete();
     }
 
