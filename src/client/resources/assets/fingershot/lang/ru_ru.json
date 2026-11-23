@@ -1,0 +1,7 @@
+{
+  "category.fingershot": "FingerShot",
+  "key.fingershot.fire": "Зарядка и выстрел",
+  "hud.fingershot.charging": "Зарядка",
+  "hud.fingershot.full": "Полный заряд",
+  "hud.fingershot.cooldown": "Перезарядка"
+}

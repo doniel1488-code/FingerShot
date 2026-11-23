@@ -1,0 +1,11 @@
+{
+  "required": true,
+  "package": "io.github.doniel1488.fingershot.client.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "HeldItemRendererMixin",
+    "PlayerEntityModelMixin",
+    "PlayerEntityRendererMixin"
+  ],
+  "injectors": { "defaultRequire": 1 }
+}

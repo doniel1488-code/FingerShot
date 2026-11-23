@@ -1,0 +1,7 @@
+{
+  "charge": {"sounds": ["fingershot:charge"]},
+  "fire": {"sounds": ["fingershot:fire"]},
+  "block": {"sounds": ["fingershot:block"]},
+  "entity": {"sounds": ["fingershot:entity"]},
+  "end": {"sounds": ["fingershot:end"]}
+}

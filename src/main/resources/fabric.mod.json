@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "fingershot",
+  "version": "${version}",
+  "name": "FingerShot",
+  "description": "Charge a finger beam and slice through full blocks.",
+  "authors": ["FingerShot contributors"],
+  "license": "MIT",
+  "environment": "*",
+  "entrypoints": {
+    "main": ["io.github.doniel1488.fingershot.FingerShot"],
+    "client": ["io.github.doniel1488.fingershot.client.FingerShotClient"]
+  },
+  "mixins": [{"config": "fingershot.client.mixins.json", "environment": "client"}],
+  "depends": {
+    "fabricloader": ">=0.18.4",
+    "fabric-api": ">=0.136.1",
+    "minecraft": "1.21.8",
+    "java": ">=21"
+  }
+}

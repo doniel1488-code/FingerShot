@@ -1,0 +1,7 @@
+{
+  "category.fingershot": "FingerShot",
+  "key.fingershot.fire": "Charge and fire",
+  "hud.fingershot.charging": "Charging",
+  "hud.fingershot.full": "Full charge",
+  "hud.fingershot.cooldown": "Recharging"
+}
