@@ -182,7 +182,7 @@ public final class TechniqueManager {
 
     private static boolean ready(ServerPlayerEntity player, String ability, long cooldownSeconds) {
         String key = player.getUuid() + ":" + ability;
-        long now = (ServerWorld) player.getWorld().getTime();
+        long now = ((ServerWorld) player.getWorld()).getTime();
         long nextUse = COOLDOWNS.getOrDefault(key, 0L);
         if (now < nextUse) {
             long seconds = (nextUse - now + 19) / 20;
@@ -193,7 +193,7 @@ public final class TechniqueManager {
     }
 
     private static void setCooldown(ServerPlayerEntity player, String ability, long seconds) {
-        COOLDOWNS.put(player.getUuid() + ":" + ability, (ServerWorld) player.getWorld().getTime() + seconds * 20L);
+        COOLDOWNS.put(player.getUuid() + ":" + ability, ((ServerWorld) player.getWorld()).getTime() + seconds * 20L);
     }
 
     private static LivingEntity findTarget(ServerPlayerEntity player, double range) {
