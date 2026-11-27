@@ -1,4 +1,5 @@
 name: Build Mahoraga & Yuji (Fabric 1.21.8)
+run-name: Build Mahoraga & Yuji - ${{ github.sha }}
 
 on:
   push:
