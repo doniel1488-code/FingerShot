@@ -4,9 +4,6 @@ on:
   push:
     branches:
       - feature/mahoraga-yuji-1.21.8
-    paths:
-      - 'mahoraga-yuji/**'
-      - '.github/workflows/mahoraga-yuji.yml'
   workflow_dispatch:
 
 permissions:
@@ -20,7 +17,7 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
       - name: Set up Java 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
