@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "mahoyu",
+  "version": "${version}",
+  "name": "Mahoraga & Yuji: Cursed Combat",
+  "description": "Mahoraga's adaptation wheel and Yuji Itadori's cursed combat techniques for Minecraft 1.21.8.",
+  "authors": ["Governix"],
+  "license": "MIT",
+  "environment": "*",
+  "entrypoints": {
+    "main": ["ru.governix.mahoyu.MahoragaYujiMod"],
+    "client": ["ru.governix.mahoyu.client.MahoragaYujiClient"]
+  },
+  "mixins": ["mahoyu.mixins.json"],
+  "depends": {
+    "fabricloader": ">=0.16.0",
+    "minecraft": "~1.21.8",
+    "java": ">=21",
+    "fabric-api": "*"
+  }
+}
