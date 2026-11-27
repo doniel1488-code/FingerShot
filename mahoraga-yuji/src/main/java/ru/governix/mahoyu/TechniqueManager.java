@@ -47,7 +47,7 @@ public final class TechniqueManager {
     }
 
     public static int divergentFist(ServerPlayerEntity player) {
-        ServerWorld world = player.getServerWorld();
+        ServerWorld world = (ServerWorld) player.getWorld();
         if (!ready(player, "divergent", 24)) return 0;
         LivingEntity target = findTarget(player, 4.5);
         if (target == null) {
@@ -66,7 +66,7 @@ public final class TechniqueManager {
     }
 
     public static int blackFlash(ServerPlayerEntity player) {
-        ServerWorld world = player.getServerWorld();
+        ServerWorld world = (ServerWorld) player.getWorld();
         if (!ready(player, "blackflash", 100)) return 0;
         LivingEntity target = findTarget(player, 4.8);
         if (target == null) {
@@ -87,7 +87,7 @@ public final class TechniqueManager {
     }
 
     public static int shrine(ServerPlayerEntity player) {
-        ServerWorld world = player.getServerWorld();
+        ServerWorld world = (ServerWorld) player.getWorld();
         if (!ready(player, "shrine", 120)) return 0;
         List<LivingEntity> targets = targetsInCone(player, 10.0, 0.72, MAX_SWEEP_TARGETS);
         if (targets.isEmpty()) {
@@ -115,7 +115,7 @@ public final class TechniqueManager {
         player.heal(8.0f);
         player.removeStatusEffect(StatusEffects.POISON);
         player.removeStatusEffect(StatusEffects.WITHER);
-        ServerWorld world = player.getServerWorld();
+        ServerWorld world = (ServerWorld) player.getWorld();
         world.spawnParticles(ParticleTypes.HEART, player.getX(), player.getY() + 1.0, player.getZ(),
                 12, 0.45, 0.5, 0.45, 0.02);
         player.sendMessage(Text.literal("§aОбратная проклятая техника: +" + Math.round(player.getHealth() - before)
@@ -125,7 +125,7 @@ public final class TechniqueManager {
     }
 
     public static int piercingBlood(ServerPlayerEntity player) {
-        ServerWorld world = player.getServerWorld();
+        ServerWorld world = (ServerWorld) player.getWorld();
         if (!ready(player, "blood", 90)) return 0;
         LivingEntity target = findTarget(player, 13.0);
         if (target == null) {
@@ -182,7 +182,7 @@ public final class TechniqueManager {
 
     private static boolean ready(ServerPlayerEntity player, String ability, long cooldownSeconds) {
         String key = player.getUuid() + ":" + ability;
-        long now = player.getServerWorld().getTime();
+        long now = (ServerWorld) player.getWorld().getTime();
         long nextUse = COOLDOWNS.getOrDefault(key, 0L);
         if (now < nextUse) {
             long seconds = (nextUse - now + 19) / 20;
@@ -193,11 +193,11 @@ public final class TechniqueManager {
     }
 
     private static void setCooldown(ServerPlayerEntity player, String ability, long seconds) {
-        COOLDOWNS.put(player.getUuid() + ":" + ability, player.getServerWorld().getTime() + seconds * 20L);
+        COOLDOWNS.put(player.getUuid() + ":" + ability, (ServerWorld) player.getWorld().getTime() + seconds * 20L);
     }
 
     private static LivingEntity findTarget(ServerPlayerEntity player, double range) {
-        ServerWorld world = player.getServerWorld();
+        ServerWorld world = (ServerWorld) player.getWorld();
         Vec3d eye = player.getEyePos();
         Vec3d direction = player.getRotationVec(1.0f);
         Box search = player.getBoundingBox().expand(range, range * 0.65, range);
@@ -215,7 +215,7 @@ public final class TechniqueManager {
 
     private static List<LivingEntity> targetsInCone(ServerPlayerEntity player, double range,
                                                      double minDot, int maxTargets) {
-        ServerWorld world = player.getServerWorld();
+        ServerWorld world = (ServerWorld) player.getWorld();
         Vec3d eye = player.getEyePos();
         Vec3d direction = player.getRotationVec(1.0f);
         Box search = player.getBoundingBox().expand(range, range * 0.5, range);
@@ -232,7 +232,7 @@ public final class TechniqueManager {
     }
 
     private static void hit(ServerPlayerEntity attacker, LivingEntity target, float damage) {
-        ServerWorld world = attacker.getServerWorld();
+        ServerWorld world = (ServerWorld) attacker.getWorld();
         target.damage(world, attacker.getDamageSources().playerAttack(attacker), damage);
     }
 
