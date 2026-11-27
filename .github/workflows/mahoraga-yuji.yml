@@ -4,7 +4,11 @@ run-name: Build Mahoraga & Yuji - ${{ github.sha }}
 on:
   push:
     branches:
+      - main
       - feature/mahoraga-yuji-1.21.8
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
