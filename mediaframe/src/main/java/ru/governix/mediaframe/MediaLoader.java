@@ -218,8 +218,9 @@ final class MediaLoader {
                 if (details.length() > 500) {
                     details = details.substring(details.length() - 500);
                 }
-                if (details.contains("Sign in to confirm you're not a bot")
-                        || details.contains("LOGIN_REQUIRED")) {
+                String lowerDetails = details.toLowerCase(Locale.ROOT);
+                if (lowerDetails.contains("sign in to confirm")
+                        || lowerDetails.contains("login_required")) {
                     throw new IOException("YouTube блокирует запросы с IP сервера проверкой «не бот». "
                             + "Положи Netscape cookies.txt в plugins/GovernixMediaFrame/ и укажи "
                             + "youtube-cookies-file: cookies.txt в config.yml. "
