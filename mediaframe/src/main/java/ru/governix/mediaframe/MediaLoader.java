@@ -38,6 +38,9 @@ final class MediaLoader {
     private static final Pattern HTML_ATTRIBUTE = Pattern.compile(
             "(?is)([a-zA-Z_:][-a-zA-Z0-9_:.]*)\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)'|([^\\s>]+))"
     );
+    private static final Pattern EMBEDDED_MEDIA_URL = Pattern.compile(
+            "(?i)https?://[^\\s\\\"'<>\\\\]+?\\.(?:mp4|webm|gif|png|jpe?g)(?:\\?[^\\s\\\"'<>\\\\]*)?"
+    );
 
     private MediaLoader() {
     }
@@ -48,6 +51,7 @@ final class MediaLoader {
             long maxBytes,
             String ffmpegPath,
             String ytDlpPath,
+            String denoPath,
             Path pluginFolder,
             int videoFps,
             int maxVideoSeconds,
@@ -66,9 +70,9 @@ final class MediaLoader {
         if (isYoutube(uri)) {
             String actualFfmpeg = BinaryManager.ensureFfmpeg(ffmpegPath, pluginFolder);
             String actualYtDlp = BinaryManager.ensureYtDlp(ytDlpPath, pluginFolder);
-            String denoPath = BinaryManager.ensureDeno("deno", pluginFolder);
+            String actualDeno = BinaryManager.ensureDeno(denoPath, pluginFolder);
             byte[] videoBytes = downloadYoutube(uri, maxBytes, actualFfmpeg,
-                    actualYtDlp, denoPath, maxVideoSeconds);
+                    actualYtDlp, actualDeno, maxVideoSeconds);
             return decodeVideo(videoBytes, actualFfmpeg, videoFps, maxVideoSeconds, maxVideoFrames);
         }
 
