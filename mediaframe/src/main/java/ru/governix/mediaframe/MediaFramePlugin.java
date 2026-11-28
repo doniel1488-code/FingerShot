@@ -100,6 +100,7 @@ public final class MediaFramePlugin extends JavaPlugin implements Listener {
                             getConfig().getString("ffmpeg-path", "ffmpeg"),
                             getConfig().getString("yt-dlp-path", "yt-dlp"),
                             getConfig().getString("deno-path", "deno"),
+                            getConfig().getString("youtube-cookies-file", "cookies.txt"),
                             getDataFolder().toPath(),
                             clamp(getConfig().getInt("video-fps", 6), 1, 20),
                             clamp(getConfig().getInt("max-video-seconds", 30), 1, 120),
