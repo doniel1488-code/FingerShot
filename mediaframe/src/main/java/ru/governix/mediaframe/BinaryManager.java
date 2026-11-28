@@ -44,7 +44,7 @@ final class BinaryManager {
     private BinaryManager() {
     }
 
-    static String ensureFfmpeg(String configuredPath, Path pluginFolder) throws IOException {
+    static synchronized String ensureFfmpeg(String configuredPath, Path pluginFolder) throws IOException {
         String system = findExecutable(configuredPath, "-version");
         if (system != null) {
             return system;
@@ -85,7 +85,7 @@ final class BinaryManager {
         }
     }
 
-    static String ensureYtDlp(String configuredPath, Path pluginFolder) throws IOException {
+    static synchronized String ensureYtDlp(String configuredPath, Path pluginFolder) throws IOException {
         String system = findExecutable(configuredPath, "--version");
         if (system != null) {
             return system;
@@ -120,7 +120,7 @@ final class BinaryManager {
         }
     }
 
-    static String ensureDeno(String configuredPath, Path pluginFolder) throws IOException {
+    static synchronized String ensureDeno(String configuredPath, Path pluginFolder) throws IOException {
         String system = findExecutable(configuredPath, "--version");
         if (system != null) {
             return system;
@@ -194,7 +194,12 @@ final class BinaryManager {
                     .redirectOutput(ProcessBuilder.Redirect.DISCARD)
                     .redirectError(ProcessBuilder.Redirect.DISCARD)
                     .start();
-            return process.waitFor(12, TimeUnit.SECONDS) && process.exitValue() == 0;
+            boolean finished = process.waitFor(12, TimeUnit.SECONDS);
+            if (!finished) {
+                process.destroyForcibly();
+                return false;
+            }
+            return process.exitValue() == 0;
         } catch (Exception ignored) {
             if (process != null) {
                 process.destroyForcibly();
