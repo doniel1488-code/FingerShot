@@ -30,6 +30,8 @@ jobs:
           MEDIAFRAME_TEST_PROVISIONING: 'true'
         run: mvn --batch-mode --no-transfer-progress -DskipTests clean package
       - name: Run media URL and binary provisioning smoke tests
+        env:
+          MEDIAFRAME_TEST_PROVISIONING: 'true'
         run: java -cp 'mediaframe/target/test-classes:mediaframe/target/GovernixMediaFrame-1.2.0-Paper-1.21.11.jar' ru.governix.mediaframe.MediaFrameSmokeTest
       - name: Upload plugin JAR
         uses: actions/upload-artifact@v4
