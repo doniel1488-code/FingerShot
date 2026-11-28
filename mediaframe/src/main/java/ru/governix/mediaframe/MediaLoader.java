@@ -118,7 +118,7 @@ final class MediaLoader {
         Path errorLog = directory.resolve("yt-dlp-error.log");
         String outputTemplate = directory.resolve("youtube.%(ext)s").toString();
 
-        List<String> command = List.of(
+        List<String> command = new ArrayList<>(List.of(
                 ytDlpPath,
                 "--ignore-config",
                 "--no-playlist",
@@ -130,12 +130,17 @@ final class MediaLoader {
                 "--fragment-retries", "2",
                 "--download-sections", "*0:" + Math.max(1, maxSeconds),
                 "--force-keyframes-at-cuts",
-                "--ffmpeg-location", ffmpegPath,
                 "--format", "bv*[height<=480]+ba/b[height<=480]/bv*+ba/b",
                 "--merge-output-format", "mp4/mkv",
                 "--output", outputTemplate,
                 uri.toString()
-        );
+        ));
+        // By default yt-dlp finds ffmpeg/ffprobe on PATH. Only pass a location
+        // when the administrator configured a non-default executable/path.
+        if (ffmpegPath != null && !ffmpegPath.isBlank() && !"ffmpeg".equals(ffmpegPath)) {
+            command.add(1, "--ffmpeg-location");
+            command.add(2, ffmpegPath);
+        }
 
         try {
             Process process;
