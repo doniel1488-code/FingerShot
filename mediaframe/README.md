@@ -1,25 +1,27 @@
 # GovernixMediaFrame
 
-Paper plugin for **Minecraft 1.21.11**. Displays images and video frames in ordinary item frames by using a server-generated filled map. Players do not need a client mod or resource pack.
+Paper plugin for **Minecraft 1.21.11**. It displays images and video frames inside ordinary item frames by using a server-generated filled map. Players do not need a client mod or resource pack.
 
 ## Install
 
 1. Download the JAR from the successful **GovernixMediaFrame Paper 1.21.11** GitHub Actions run in this repository.
 2. Put it in the server's \`plugins/\` directory.
 3. Restart Paper.
-4. For MP4/WebM/GIF video playback, install FFmpeg on the server and make sure it is available in PATH.
-5. For YouTube links, also install \`yt-dlp\` and make sure it is available in PATH. Set \`yt-dlp-path\` in \`plugins/GovernixMediaFrame/config.yml\` if needed.
+4. The plugin checks for FFmpeg automatically. When it cannot find it, it downloads a Linux binary into \`plugins/GovernixMediaFrame/bin/\`.
+5. For YouTube, it also prepares yt-dlp and Deno automatically in the same folder.
 
-Images (PNG/JPG and animated GIF) do not require FFmpeg.
+The binaries are downloaded from their upstream GitHub release pages, SHA-256 verified before use, and cached. No sudo, apt, pip, npm, or manual PATH setup is required on supported Linux systems. The first video request can take longer because the tools must be downloaded once. Allow outbound HTTPS and enough free disk space (roughly 150 MB for the cached tools).
+
+Automatic tool setup supports Linux x86_64 and Linux ARM64. On other operating systems, install FFmpeg/yt-dlp/Deno yourself and set their executable paths in config.yml.
 
 ## Commands
 
 Look directly at the item frame and run:
 
 - \`/mf https://example.com/image.png\` — detect the media format automatically.
-- \`/mf https://imgur.com/gallery/...\` — resolve an Imgur page's Open Graph image.
-- \`/mf https://tenor.com/view/...\` — resolve Tenor's Open Graph video (MP4 preferred) or GIF.
-- \`/mf https://www.youtube.com/watch?v=...\` — download a short opening segment through yt-dlp.
+- \`/mf https://imgur.com/gallery/...\` — resolve an Imgur page's Open Graph/embedded image URL.
+- \`/mf https://tenor.com/view/...\` — resolve Tenor's MP4/WebM/GIF URL from its page metadata or embedded media data.
+- \`/mf https://www.youtube.com/watch?v=...\` — retrieve the opening video segment using yt-dlp.
 - \`/mf image <url>\` — force image/GIF mode.
 - \`/mf video <url>\` — force video mode.
 - \`/mf clear\` — remove the map and saved media URL from the frame.
@@ -27,16 +29,15 @@ Look directly at the item frame and run:
 
 The full command name is \`/mediaframe\`; \`/mf\` is its alias.
 
-## Supported page links
+## Supported media
 
-For ordinary website pages, the plugin reads Open Graph and Twitter metadata:
+- Static images: PNG, JPG/JPEG, GIF.
+- Animated GIF: decoded to frames.
+- Direct video: MP4, WebM, M4V, MOV, MKV and AVI (depending on FFmpeg codec support).
+- Page URLs: Imgur and Tenor metadata/embedded CDN URL extraction.
+- YouTube: public videos accessible to yt-dlp. Private, DRM-protected, age-gated or region-blocked videos are not guaranteed.
 
-- Images: \`og:image\`, \`og:image:url\`, \`twitter:image\`.
-- Videos: \`og:video:secure_url\`, \`og:video\`, \`twitter:player:stream\`.
-
-The page must expose a public direct media URL in its metadata. Login-gated pages, private posts, DRM streams, and pages that do not publish media metadata are not supported.
-
-YouTube is handled separately by \`yt-dlp\`, not by an embedded browser. Public videos that yt-dlp can access are supported. Age-restricted/private/region-blocked videos may require cookies and are not guaranteed.
+YouTube extraction uses yt-dlp with Deno's JavaScript runtime and the yt-dlp EJS challenge scripts. It does not play audio in Minecraft.
 
 ## Video limitations
 
@@ -47,16 +48,19 @@ For YouTube, only the first configured \`max-video-seconds\` are downloaded (30 
 ## Configuration
 
 - \`max-download-mb\`: maximum downloaded media size (default 25 MB).
-- \`ffmpeg-path\`: FFmpeg executable (default \`ffmpeg\`).
-- \`yt-dlp-path\`: yt-dlp executable (default \`yt-dlp\`).
+- \`ffmpeg-path\`: optional FFmpeg executable or PATH command (default \`ffmpeg\`); otherwise auto-installed on supported Linux.
+- \`yt-dlp-path\`: optional yt-dlp executable or PATH command (default \`yt-dlp\`); otherwise auto-installed on supported Linux.
+- \`deno-path\`: optional Deno executable or PATH command (default \`deno\`); otherwise auto-installed for YouTube on supported Linux.
 - \`video-fps\`: requested map frame rate (default 6).
 - \`max-video-seconds\`: maximum video clip length (default 30, plugin maximum 120).
 - \`max-video-frames\`: maximum extracted frames.
 
 ## Safety and limits
 
-- Only HTTP/HTTPS URLs are accepted. Local/private network destinations are blocked.
-- Default download limit: 25 MB.
+- Only HTTP/HTTPS media URLs are accepted. Local/private network destinations are blocked.
+- Default media download limit: 25 MB.
 - Network loading and media decoding run off the main server thread.
+- Upstream executable downloads are SHA-256 checked before extraction or execution.
 - The media URL is saved on the item frame, so the plugin reloads its display when the containing chunk loads again.
 - Permission: \`mediaframe.use\` (default: operators).
+- FFmpeg's LGPL build and the upstream yt-dlp/Deno binaries retain their upstream licensing; consult their release pages for the current license notices.
