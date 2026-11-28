@@ -61,7 +61,9 @@ final class MediaLoader {
             int videoFps,
             int maxVideoSeconds,
             int maxVideoFrames,
-            int maxImageFrames
+            int maxImageFrames,
+            int tileColumns,
+            int tileRows
     ) throws IOException {
         URI uri;
         try {
@@ -69,6 +71,13 @@ final class MediaLoader {
         } catch (IllegalArgumentException exception) {
             throw new IOException("Некорректный URL.", exception);
         }
+
+        if (tileColumns < 1 || tileRows < 1 || tileColumns > 5 || tileRows > 5
+                || (long) tileColumns * tileRows > 15) {
+            throw new IOException("Недопустимый размер сетки медиа.");
+        }
+        int canvasWidth = tileColumns * MAP_SIZE;
+        int canvasHeight = tileRows * MAP_SIZE;
 
         // YouTube does not expose a normal direct MP4 URL on its watch page.
         // yt-dlp downloads only the configured first segment; FFmpeg then turns it into map frames.
@@ -78,7 +87,8 @@ final class MediaLoader {
             String actualDeno = BinaryManager.ensureDeno(denoPath, pluginFolder);
             byte[] videoBytes = downloadYoutube(uri, maxBytes, actualFfmpeg,
                     actualYtDlp, actualDeno, youtubeCookiesFile, pluginFolder, maxVideoSeconds);
-            return decodeVideo(videoBytes, actualFfmpeg, videoFps, maxVideoSeconds, maxVideoFrames);
+            return decodeVideo(videoBytes, actualFfmpeg, videoFps, maxVideoSeconds,
+                    maxVideoFrames, canvasWidth, canvasHeight);
         }
 
         Download download = download(uri, maxBytes);
@@ -102,10 +112,10 @@ final class MediaLoader {
         if (video) {
             String actualFfmpeg = BinaryManager.ensureFfmpeg(ffmpegPath, pluginFolder);
             return decodeVideo(download.bytes(), actualFfmpeg, videoFps,
-                    maxVideoSeconds, maxVideoFrames);
+                    maxVideoSeconds, maxVideoFrames, canvasWidth, canvasHeight);
         }
 
-        return decodeImage(download.bytes(), maxImageFrames);
+        return decodeImage(download.bytes(), maxImageFrames, canvasWidth, canvasHeight);
     }
 
     private static boolean isYoutube(URI uri) {
@@ -665,7 +675,12 @@ final class MediaLoader {
                 || lower.endsWith(".gifv");
     }
 
-    private static List<BufferedImage> decodeImage(byte[] bytes, int maxFrames) throws IOException {
+    private static List<BufferedImage> decodeImage(
+            byte[] bytes,
+            int maxFrames,
+            int canvasWidth,
+            int canvasHeight
+    ) throws IOException {
         try (ImageInputStream input = ImageIO.createImageInputStream(new ByteArrayInputStream(bytes))) {
             if (input == null) {
                 throw new IOException("Не удалось прочитать изображение.");
@@ -691,7 +706,7 @@ final class MediaLoader {
                         frameCount = 1;
                     }
                 }
-                frameCount = Math.min(frameCount, Math.max(1, maxFrames));
+                frameCount = Math.min(frameCount, limitFrameCount(maxFrames, canvasWidth, canvasHeight));
 
                 List<BufferedImage> frames = new ArrayList<>(frameCount);
                 for (int index = 0; index < frameCount; index++) {
@@ -700,7 +715,7 @@ final class MediaLoader {
                         break;
                     }
                     validateImageDimensions(decoded.getWidth(), decoded.getHeight());
-                    frames.add(fitToMap(decoded));
+                    frames.add(fitToCanvas(decoded, canvasWidth, canvasHeight));
                 }
 
                 if (frames.isEmpty()) {
@@ -718,8 +733,11 @@ final class MediaLoader {
             String ffmpegPath,
             int fps,
             int maxSeconds,
-            int maxFrames
+            int maxFrames,
+            int canvasWidth,
+            int canvasHeight
     ) throws IOException {
+        maxFrames = limitFrameCount(maxFrames, canvasWidth, canvasHeight);
         Path directory = Files.createTempDirectory("governix-mediaframe-");
         try {
             Path input = directory.resolve("source-video");
@@ -736,8 +754,10 @@ final class MediaLoader {
                     "-i", input.toString(),
                     "-t", Integer.toString(Math.max(1, maxSeconds)),
                     "-vf", "fps=" + Math.max(1, fps)
-                            + ",scale=128:128:force_original_aspect_ratio=decrease:flags=lanczos"
-                            + ",pad=128:128:(ow-iw)/2:(oh-ih)/2:color=black",
+                            + ",scale=" + canvasWidth + ":" + canvasHeight
+                            + ":force_original_aspect_ratio=decrease:flags=lanczos"
+                            + ",pad=" + canvasWidth + ":" + canvasHeight
+                            + ":(ow-iw)/2:(oh-ih)/2:color=black",
                     "-frames:v", Integer.toString(Math.max(1, maxFrames)),
                     "-threads", "1",
                     outputPattern.toString()
@@ -791,7 +811,7 @@ final class MediaLoader {
             for (Path frameFile : frameFiles) {
                 BufferedImage image = ImageIO.read(frameFile.toFile());
                 if (image != null) {
-                    frames.add(fitToMap(image));
+                    frames.add(fitToCanvas(image, canvasWidth, canvasHeight));
                 }
             }
             if (frames.isEmpty()) {
@@ -803,6 +823,12 @@ final class MediaLoader {
         }
     }
 
+    private static int limitFrameCount(int requested, int canvasWidth, int canvasHeight) {
+        long bytesPerFrame = (long) canvasWidth * canvasHeight * 4L;
+        int memoryLimited = (int) Math.max(1L, (128L * 1024L * 1024L) / Math.max(1L, bytesPerFrame));
+        return Math.max(1, Math.min(Math.max(1, requested), memoryLimited));
+    }
+
     private static void validateImageDimensions(int width, int height) throws IOException {
         if (width < 1 || height < 1 || width > 8192 || height > 8192
                 || (long) width * height > 40_000_000L) {
@@ -810,23 +836,23 @@ final class MediaLoader {
         }
     }
 
-    private static BufferedImage fitToMap(BufferedImage source) {
-        BufferedImage result = new BufferedImage(MAP_SIZE, MAP_SIZE, BufferedImage.TYPE_INT_RGB);
+    static BufferedImage fitToCanvas(BufferedImage source, int canvasWidth, int canvasHeight) {
+        BufferedImage result = new BufferedImage(canvasWidth, canvasHeight, BufferedImage.TYPE_INT_RGB);
         Graphics2D graphics = result.createGraphics();
         try {
             graphics.setColor(Color.BLACK);
-            graphics.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
+            graphics.fillRect(0, 0, canvasWidth, canvasHeight);
             graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
                     RenderingHints.VALUE_INTERPOLATION_BICUBIC);
             graphics.setRenderingHint(RenderingHints.KEY_RENDERING,
                     RenderingHints.VALUE_RENDER_QUALITY);
 
-            double scale = Math.min((double) MAP_SIZE / source.getWidth(),
-                    (double) MAP_SIZE / source.getHeight());
+            double scale = Math.min((double) canvasWidth / source.getWidth(),
+                    (double) canvasHeight / source.getHeight());
             int width = Math.max(1, (int) Math.round(source.getWidth() * scale));
             int height = Math.max(1, (int) Math.round(source.getHeight() * scale));
-            int x = (MAP_SIZE - width) / 2;
-            int y = (MAP_SIZE - height) / 2;
+            int x = (canvasWidth - width) / 2;
+            int y = (canvasHeight - height) / 2;
             graphics.drawImage(source, x, y, width, height, null);
         } finally {
             graphics.dispose();

@@ -1,33 +1,48 @@
 # GovernixMediaFrame
 
-Paper plugin for **Minecraft 1.21.11**. It displays images and video frames inside ordinary item frames by using a server-generated filled map. Players do not need a client mod or resource pack.
+Paper plugin for **Minecraft 1.21.11**. It displays images and video across rectangular grids of ordinary item frames using server-generated filled maps. Players do not need a client mod or resource pack.
 
 ## Install
 
 1. Download the JAR from the successful **GovernixMediaFrame Paper 1.21.11** GitHub Actions run in this repository.
-2. Put it in the server's \`plugins/\` directory.
+2. Put it in the server's `plugins/` directory.
 3. Restart Paper.
-4. The plugin checks for FFmpeg automatically. When it cannot find it, it downloads a Linux binary into \`plugins/GovernixMediaFrame/bin/\`.
+4. The plugin checks for FFmpeg automatically. When it cannot find it, it downloads a Linux binary into `plugins/GovernixMediaFrame/bin/`.
 5. For YouTube, it also prepares yt-dlp and Deno automatically in the same folder.
 
 The binaries are downloaded from their upstream GitHub release pages, SHA-256 verified before use, and cached. No sudo, apt, pip, npm, or manual PATH setup is required on supported Linux systems. The first video request can take longer because the tools must be downloaded once. Allow outbound HTTPS and enough free disk space (roughly 150 MB for the cached tools).
 
 Automatic tool setup supports Linux x86_64 and Linux ARM64. On other operating systems, install FFmpeg/yt-dlp/Deno yourself and set their executable paths in config.yml.
 
+## Multi-frame screens
+
+Place a rectangular grid of empty item frames on a flat wall. All frames must face the same direction and have the same rotation. Look at the **top-left frame** (from the point of view of someone looking at the wall) and run the command with the desired width and height.
+
+Each block is one 128×128 map tile. The plugin renders the complete image at the combined resolution first, then crops it into tiles. For example:
+
+| Grid | Combined resolution |
+|---|---:|
+| 1x1 | 128×128 |
+| 3x3 | 384×384 |
+| 3x4 | 384×512 |
+| 5x3 | 640×384 |
+
+Supported dimensions are 1–5 on each side, with a maximum of **15 frames per screen**. The image is fitted proportionally into the requested canvas; it is not stretched. A source image with too little resolution cannot gain real detail from upscaling.
+
 ## Commands
 
-Look directly at the item frame and run:
+Look at the top-left frame and run:
 
-- \`/mf https://example.com/image.png\` — detect the media format automatically.
-- \`/mf https://imgur.com/gallery/...\` — resolve an Imgur page's Open Graph/embedded image URL.
-- \`/mf https://tenor.com/view/...\` — resolve Tenor's MP4/WebM/GIF URL from its page metadata or embedded media data.
-- \`/mf https://www.youtube.com/watch?v=...\` — retrieve the opening video segment using yt-dlp.
-- \`/mf image <url>\` — force image/GIF mode.
-- \`/mf video <url>\` — force video mode.
-- \`/mf clear\` — remove the map and saved media URL from the frame.
-- \`/mf info\` — show the URL saved in the targeted frame.
+- `/mf <url>` — one frame (1x1) by default.
+- `/mf <url> 3x3` — image/video across a 3×3 grid.
+- `/mf <url> 3x4` — portrait grid, 384×512 pixels.
+- `/mf <url> 5x3` — wide grid, 640×384 pixels.
+- `/mf image <url> 3x3` — force image/GIF mode.
+- `/mf video <url> 5x3` — force video mode.
+- `/mf clear` — clear the entire connected MediaFrame screen.
+- `/mf info` — show the URL and screen dimensions.
 
-The full command name is \`/mediaframe\`; \`/mf\` is its alias.
+The full command name is `/mediaframe`; `/mf` is its alias. If a target frame is part of an existing MediaFrame screen, running a new command while looking at its top-left tile replaces the old screen, including tiles outside the new dimensions. The plugin will not overwrite ordinary items or frames belonging to a different screen.
 
 ## Supported media
 
@@ -41,26 +56,29 @@ YouTube extraction uses yt-dlp with Deno's JavaScript runtime and the yt-dlp EJS
 
 ## Video limitations
 
-Minecraft maps are 128×128 pixels and are not a native video surface. The plugin extracts frames with FFmpeg and updates the map over time. The default is 6 FPS and a maximum clip length of 30 seconds / 180 frames. The actual visible update rate is also limited by Minecraft map packet updates and client rendering.
+Minecraft maps are 128×128 pixels and are not a native video surface. Video frames are decoded at the combined screen resolution, and every tile uses one shared playback clock so the whole image changes in sync. The default is 6 FPS and a maximum clip length of 30 seconds / 180 decoded frames (subject to the 128 MiB decoded-frame memory limit). The actual visible update rate is also limited by Minecraft map packet updates and client rendering.
 
-For YouTube, only the first configured \`max-video-seconds\` are downloaded (30 seconds by default, configurable up to 120 seconds). The plugin does not fetch the entire long-form video. Audio is not played through the map.
+For YouTube, only the first configured `max-video-seconds` are downloaded (30 seconds by default, configurable up to 120 seconds). The plugin does not fetch the entire long-form video. Audio is not played through the map.
 
 ## Configuration
 
-- \`max-download-mb\`: maximum downloaded media size (default 25 MB).
-- \`ffmpeg-path\`: optional FFmpeg executable or PATH command (default \`ffmpeg\`); otherwise auto-installed on supported Linux.
-- \`yt-dlp-path\`: optional yt-dlp executable or PATH command (default \`yt-dlp\`); otherwise auto-installed on supported Linux.
-- \`deno-path\`: optional Deno executable or PATH command (default \`deno\`); otherwise auto-installed for YouTube on supported Linux.
-- \`video-fps\`: requested map frame rate (default 6).
-- \`max-video-seconds\`: maximum video clip length (default 30, plugin maximum 120).
-- \`max-video-frames\`: maximum extracted frames.
+- `max-download-mb`: maximum downloaded media size (default 25 MB).
+- `target-distance`: maximum distance to target the top-left frame (default 8 blocks).
+- `ffmpeg-path`: optional FFmpeg executable or PATH command (default `ffmpeg`); otherwise auto-installed on supported Linux.
+- `yt-dlp-path`: optional yt-dlp executable or PATH command (default `yt-dlp`); otherwise auto-installed on supported Linux.
+- `deno-path`: optional Deno executable or PATH command (default `deno`); otherwise auto-installed for YouTube on supported Linux.
+- `youtube-cookies-file`: optional Netscape-format YouTube cookies file (default `cookies.txt`).
+- `video-fps`: requested map frame rate (default 6).
+- `max-video-seconds`: maximum video clip length (default 30, plugin maximum 120).
+- `max-video-frames`: maximum decoded video frames (default 180, also capped by memory).
+- `max-image-frames`: maximum decoded GIF frames (default 120, also capped by memory).
 
 ## Safety and limits
 
 - Only HTTP/HTTPS media URLs are accepted. Local/private network destinations are blocked.
 - Default media download limit: 25 MB.
 - Network loading and media decoding run off the main server thread.
-- Upstream executable downloads are SHA-256 checked before extraction or execution.
-- The media URL is saved on the item frame, so the plugin reloads its display when the containing chunk loads again.
-- Permission: \`mediaframe.use\` (default: operators).
+- Upstream executable downloads are SHA-256 checked before use.
+- The media URL and grid coordinates are saved on each frame, so the complete screen can be restored when its chunks are loaded again.
+- Permission: `mediaframe.use` (default: operators).
 - FFmpeg's LGPL build and the upstream yt-dlp/Deno binaries retain their upstream licensing; consult their release pages for the current license notices.

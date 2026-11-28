@@ -10,6 +10,7 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 
@@ -44,8 +45,11 @@ public final class MediaFrameCommand implements CommandExecutor, TabCompleter {
         }
 
         if (first.equals("clear") || first.equals("remove")) {
-            plugin.clearFrame(frame);
-            player.sendMessage("§aМедиа удалено из рамки.");
+            if (plugin.clearFrame(frame)) {
+                player.sendMessage("§aМедиа удалено из всей сетки рамок.");
+            } else {
+                player.sendMessage("§7В этой рамке нет изображения MediaFrame.");
+            }
             return true;
         }
 
@@ -53,26 +57,42 @@ public final class MediaFrameCommand implements CommandExecutor, TabCompleter {
             String url = plugin.getStoredUrl(frame);
             player.sendMessage(url == null
                     ? "§7В этой рамке нет медиа."
-                    : "§7URL рамки: §f" + url);
+                    : "§7URL: §f" + url + " §7| размер: §f" + plugin.getStoredDimensions(frame));
             return true;
         }
 
-        String type = "auto";
-        String url;
-        if ((first.equals("image") || first.equals("video")) && args.length >= 2) {
-            type = first;
-            url = String.join("", java.util.Arrays.copyOfRange(args, 1, args.length));
-        } else {
-            url = String.join("", args);
+        int end = args.length;
+        MediaFrameSize size = new MediaFrameSize(1, 1);
+        if (end > 1 && MediaFrameSize.looksLikeSize(args[end - 1])) {
+            try {
+                size = MediaFrameSize.parse(args[end - 1]);
+            } catch (IllegalArgumentException exception) {
+                player.sendMessage("§c" + exception.getMessage());
+                sendUsage(player, label);
+                return true;
+            }
+            end--;
         }
 
+        String type = "auto";
+        int urlStart = 0;
+        if (first.equals("image") || first.equals("video")) {
+            type = first;
+            urlStart = 1;
+        }
+        if (end <= urlStart) {
+            sendUsage(player, label);
+            return true;
+        }
+
+        String url = String.join("", Arrays.copyOfRange(args, urlStart, end));
         if (!url.startsWith("https://") && !url.startsWith("http://")) {
             player.sendMessage("§cУкажи полный URL, начинающийся с http:// или https://.");
             sendUsage(player, label);
             return true;
         }
 
-        plugin.loadForFrame(player, frame, url, type);
+        plugin.loadForFrame(player, frame, url, type, size);
         return true;
     }
 
@@ -89,16 +109,19 @@ public final class MediaFrameCommand implements CommandExecutor, TabCompleter {
             return null;
         }
         Entity hit = result.getHitEntity();
-        return hit instanceof ItemFrame frame ? frame : null;
+        return hit instanceof ItemFrame itemFrame ? itemFrame : null;
     }
 
     private void sendUsage(Player player, String label) {
-        player.sendMessage("§6MediaFrame §7— изображение и видео в рамке");
-        player.sendMessage("§e/" + label + " <url> §7— определить формат автоматически");
-        player.sendMessage("§e/" + label + " image <url> §7— загрузить картинку/GIF");
-        player.sendMessage("§e/" + label + " video <url> §7— загрузить прямой MP4/WebM");
-        player.sendMessage("§e/" + label + " clear §7— очистить рамку");
-        player.sendMessage("§e/" + label + " info §7— показать сохранённый URL");
+        player.sendMessage("§6MediaFrame §7— изображения и видео на сетке рамок");
+        player.sendMessage("§e/" + label + " <url> [ширинаxвысота] §7— загрузить медиа");
+        player.sendMessage("§e/" + label + " image <url> [ширинаxвысота] §7— изображение/GIF");
+        player.sendMessage("§e/" + label + " video <url> [ширинаxвысота] §7— видео");
+        player.sendMessage("§eПримеры: §f/mf <url> 3x3 §7или §f/mf video <url> 5x3");
+        player.sendMessage("§eРазмер: от 1x1 до 5x3 (не более 15 рамок).");
+        player.sendMessage("§eПеред загрузкой поставь пустую сетку и целься в её верхнюю левую рамку.");
+        player.sendMessage("§e/" + label + " clear §7— очистить всю сетку");
+        player.sendMessage("§e/" + label + " info §7— информация о медиа");
     }
 
     @Override

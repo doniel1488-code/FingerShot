@@ -20,6 +20,7 @@ public final class MediaFrameSmokeTest {
         resolvesTenorVideoFromOpenGraphMetadata();
         resolvesTenorVideoFromEmbeddedJson();
         resolvesImgurImageFromOpenGraphMetadata();
+        validatesMultiFrameDimensionsAndCanvasResolution();
 
         if ("true".equalsIgnoreCase(System.getenv("MEDIAFRAME_TEST_PROVISIONING"))) {
             managedLinuxToolsCanBeDownloadedVerifiedAndExecuted();
@@ -64,6 +65,38 @@ public final class MediaFrameSmokeTest {
         );
 
         assertEquals(IMGUR_JPEG, resolved.toString(), "Imgur Open Graph URL");
+    }
+
+    private static void validatesMultiFrameDimensionsAndCanvasResolution() throws IOException {
+        MediaFrameSize landscape = MediaFrameSize.parse("5x3");
+        assertEquals("5x3", landscape.label(), "landscape frame grid");
+        assertEquals(640, landscape.pixelWidth(), "5x3 canvas width");
+        assertEquals(384, landscape.pixelHeight(), "5x3 canvas height");
+
+        MediaFrameSize portrait = MediaFrameSize.parse("3x4");
+        assertEquals(384, portrait.pixelWidth(), "3x4 canvas width");
+        assertEquals(512, portrait.pixelHeight(), "3x4 canvas height");
+
+        var fitted = MediaLoader.fitToCanvas(
+                new java.awt.image.BufferedImage(1920, 1080, java.awt.image.BufferedImage.TYPE_INT_RGB),
+                portrait.pixelWidth(),
+                portrait.pixelHeight()
+        );
+        assertEquals(384, fitted.getWidth(), "fitted canvas width");
+        assertEquals(512, fitted.getHeight(), "fitted canvas height");
+
+        try {
+            MediaFrameSize.parse("4x4");
+            throw new AssertionError("A 16-frame screen must be rejected.");
+        } catch (IllegalArgumentException expected) {
+            // The configured limit is 15 map tiles per screen.
+        }
+    }
+
+    private static void assertEquals(int expected, int actual, String label) {
+        if (expected != actual) {
+            throw new AssertionError(label + ": expected " + expected + ", got " + actual);
+        }
     }
 
     private static void managedLinuxToolsCanBeDownloadedVerifiedAndExecuted() throws Exception {
@@ -121,7 +154,9 @@ public final class MediaFrameSmokeTest {
                 2,
                 5,
                 12,
-                120
+                120,
+        1,
+        1
         );
         if (imgurFrames.isEmpty()) {
             throw new AssertionError("Imgur gallery URL did not produce an image frame.");
@@ -140,7 +175,9 @@ public final class MediaFrameSmokeTest {
                 6,
                 2,
                 12,
-                120
+                120,
+        1,
+        1
         );
         if (tenorFrames.isEmpty()) {
             throw new AssertionError("Tenor page URL did not produce video frames.");
@@ -160,7 +197,9 @@ public final class MediaFrameSmokeTest {
                     2,
                     5,
                     12,
-                    120
+                    120,
+            1,
+            1
             );
             if (youtubeFrames.isEmpty()) {
                 throw new AssertionError("YouTube URL did not produce video frames.");
