@@ -146,7 +146,7 @@ final class MediaLoader {
                 "--js-runtimes", "deno:" + denoPath,
                 "--remote-components", "ejs:github",
                 "--ffmpeg-location", ffmpegPath,
-                "--download-sections", "*0:" + Math.max(1, maxSeconds),
+                "--download-sections", "*0-" + Math.max(1, maxSeconds),
                 "--force-keyframes-at-cuts",
                 "--format", "bv*[height<=480]+ba/b[height<=480]/bv*+ba/b",
                 "--merge-output-format", "mkv",
