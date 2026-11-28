@@ -85,6 +85,10 @@ public final class MediaFrameSmokeTest {
             assertExecutable(ffmpeg, "FFmpeg");
             assertExecutable(ytDlp, "yt-dlp");
             assertExecutable(deno, "Deno");
+
+            if ("true".equalsIgnoreCase(System.getenv("MEDIAFRAME_TEST_LIVE_URLS"))) {
+                liveUserMediaUrlsLoad(temporary, ffmpeg, ytDlp, deno);
+            }
         } finally {
             try (var paths = Files.walk(temporary)) {
                 paths.sorted(Comparator.reverseOrder()).forEach(path -> {
@@ -95,6 +99,69 @@ public final class MediaFrameSmokeTest {
                 });
             }
         }
+    }
+
+    private static void liveUserMediaUrlsLoad(
+            Path pluginFolder,
+            String ffmpeg,
+            String ytDlp,
+            String deno
+    ) throws IOException {
+        long maxBytes = 25L * 1024 * 1024;
+
+        var imgurFrames = MediaLoader.load(
+                "https://imgur.com/gallery/raturday-KhogDcz",
+                "image",
+                maxBytes,
+                ffmpeg,
+                ytDlp,
+                deno,
+                pluginFolder,
+                2,
+                5,
+                12,
+                120
+        );
+        if (imgurFrames.isEmpty()) {
+            throw new AssertionError("Imgur gallery URL did not produce an image frame.");
+        }
+        System.out.println("Live Imgur gallery URL: OK (" + imgurFrames.size() + " frame)");
+
+        var tenorFrames = MediaLoader.load(
+                "https://tenor.com/ru/view/la-rams-rampage-scuba-rams-mascot-gif-4122962656881710658",
+                "video",
+                maxBytes,
+                ffmpeg,
+                ytDlp,
+                deno,
+                pluginFolder,
+                6,
+                2,
+                12,
+                120
+        );
+        if (tenorFrames.isEmpty()) {
+            throw new AssertionError("Tenor page URL did not produce video frames.");
+        }
+        System.out.println("Live Tenor page URL: OK (" + tenorFrames.size() + " video frames)");
+
+        var youtubeFrames = MediaLoader.load(
+                "https://www.youtube.com/watch?v=4vctkTaej18",
+                "video",
+                maxBytes,
+                ffmpeg,
+                ytDlp,
+                deno,
+                pluginFolder,
+                2,
+                5,
+                12,
+                120
+        );
+        if (youtubeFrames.isEmpty()) {
+            throw new AssertionError("YouTube URL did not produce video frames.");
+        }
+        System.out.println("Live YouTube URL: OK (" + youtubeFrames.size() + " video frames)");
     }
 
     private static void assertExecutable(String path, String name) {
