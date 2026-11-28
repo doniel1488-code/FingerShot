@@ -11,6 +11,10 @@ ffmpeg-path: ffmpeg
 yt-dlp-path: yt-dlp
 deno-path: deno
 
+# Необязательно: Netscape cookies.txt из браузера, если YouTube просит подтвердить вход.
+# Положи файл в plugins/GovernixMediaFrame/cookies.txt. Оставь cookies.txt, если файл будет создан.
+youtube-cookies-file: cookies.txt
+
 # Частота кадров видео на карте. Реальное обновление ограничено map-пакетами Minecraft.
 video-fps: 6
 
