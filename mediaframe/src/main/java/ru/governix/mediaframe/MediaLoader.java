@@ -15,21 +15,28 @@ import java.net.HttpURLConnection;
 import java.net.InetAddress;
 import java.net.URI;
 import java.net.URLConnection;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.Iterator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 final class MediaLoader {
     private static final int MAP_SIZE = 128;
     private static final int MAX_REDIRECTS = 5;
-    private static final Pattern IP_LITERAL = Pattern.compile("^[0-9.]+$");
+    private static final Pattern META_TAG = Pattern.compile("(?is)<meta\\b[^>]*>");
+    private static final Pattern HTML_ATTRIBUTE = Pattern.compile(
+            "(?is)([a-zA-Z_:][-a-zA-Z0-9_:.]*)\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)'|([^\\s>]+))"
+    );
 
     private MediaLoader() {
     }
@@ -39,6 +46,7 @@ final class MediaLoader {
             String forcedType,
             long maxBytes,
             String ffmpegPath,
+            String ytDlpPath,
             int videoFps,
             int maxVideoSeconds,
             int maxVideoFrames,
@@ -51,13 +59,30 @@ final class MediaLoader {
             throw new IOException("Некорректный URL.", exception);
         }
 
-        Download download = download(uri, maxBytes);
-        boolean video = "video".equalsIgnoreCase(forcedType)
-                || ("auto".equalsIgnoreCase(forcedType) && isVideo(download.contentType(), uri));
-
-        if ("image".equalsIgnoreCase(forcedType)) {
-            video = false;
+        // YouTube does not expose a normal direct MP4 URL on its watch page.
+        // yt-dlp downloads only the configured first segment; FFmpeg then turns it into map frames.
+        if (isYoutube(uri)) {
+            byte[] videoBytes = downloadYoutube(uri, maxBytes, ffmpegPath, ytDlpPath, maxVideoSeconds);
+            return decodeVideo(videoBytes, ffmpegPath, videoFps, maxVideoSeconds, maxVideoFrames);
         }
+
+        Download download = download(uri, maxBytes);
+        URI mediaUri = download.finalUri();
+
+        // Imgur galleries and Tenor pages are HTML pages, not media files.
+        // Resolve their Open Graph / Twitter media metadata to the actual asset URL.
+        if (isHtml(download)) {
+            mediaUri = resolvePageMedia(download.bytes(), mediaUri, forcedType);
+            download = download(mediaUri, maxBytes);
+            mediaUri = download.finalUri();
+        }
+
+        if (isHtml(download)) {
+            throw new IOException("Ссылка ведёт на веб-страницу, а не на прямой медиафайл. Не удалось найти og:image или og:video.");
+        }
+
+        boolean video = "video".equalsIgnoreCase(forcedType)
+                || ("auto".equalsIgnoreCase(forcedType) && isVideo(download.contentType(), mediaUri));
 
         if (video) {
             return decodeVideo(download.bytes(), ffmpegPath, videoFps,
@@ -65,6 +90,219 @@ final class MediaLoader {
         }
 
         return decodeImage(download.bytes(), maxImageFrames);
+    }
+
+    private static boolean isYoutube(URI uri) {
+        String host = uri.getHost();
+        if (host == null) {
+            return false;
+        }
+        String normalized = host.toLowerCase(Locale.ROOT);
+        return normalized.equals("youtube.com")
+                || normalized.endsWith(".youtube.com")
+                || normalized.equals("youtu.be")
+                || normalized.equals("youtube-nocookie.com")
+                || normalized.endsWith(".youtube-nocookie.com");
+    }
+
+    private static byte[] downloadYoutube(
+            URI uri,
+            long maxBytes,
+            String ffmpegPath,
+            String ytDlpPath,
+            int maxSeconds
+    ) throws IOException {
+        validateYoutubeUri(uri);
+        Path directory = Files.createTempDirectory("governix-youtube-");
+        Path errorLog = directory.resolve("yt-dlp-error.log");
+        String outputTemplate = directory.resolve("youtube.%(ext)s").toString();
+
+        List<String> command = List.of(
+                ytDlpPath,
+                "--ignore-config",
+                "--no-playlist",
+                "--no-warnings",
+                "--no-progress",
+                "--quiet",
+                "--socket-timeout", "15",
+                "--retries", "2",
+                "--fragment-retries", "2",
+                "--download-sections", "*0:" + Math.max(1, maxSeconds),
+                "--force-keyframes-at-cuts",
+                "--ffmpeg-location", ffmpegPath,
+                "--format", "bv*[height<=480]+ba/b[height<=480]/bv*+ba/b",
+                "--merge-output-format", "mp4/mkv",
+                "--output", outputTemplate,
+                uri.toString()
+        );
+
+        try {
+            Process process;
+            try {
+                process = new ProcessBuilder(command)
+                        .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                        .redirectError(errorLog.toFile())
+                        .start();
+            } catch (IOException exception) {
+                throw new IOException("YouTube требует yt-dlp. Установи yt-dlp на сервер и укажи yt-dlp-path в config.yml.", exception);
+            }
+
+            boolean finished;
+            try {
+                finished = process.waitFor(150, TimeUnit.SECONDS);
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                process.destroyForcibly();
+                throw new IOException("Загрузка YouTube была прервана.", exception);
+            }
+
+            if (!finished) {
+                process.destroyForcibly();
+                throw new IOException("yt-dlp не успел получить видео за 150 секунд.");
+            }
+
+            List<Path> outputs;
+            try (var files = Files.list(directory)) {
+                outputs = files
+                        .filter(path -> path.getFileName().toString().matches("youtube\\.(mp4|mkv|webm|mov|avi)"))
+                        .toList();
+            }
+
+            if (process.exitValue() != 0 || outputs.isEmpty()) {
+                String details = Files.exists(errorLog) ? Files.readString(errorLog) : "";
+                if (details.length() > 500) {
+                    details = details.substring(details.length() - 500);
+                }
+                throw new IOException("Не удалось получить видео с YouTube. Проверь доступность ролика и установку yt-dlp/FFmpeg. " + details);
+            }
+
+            Path videoFile = outputs.get(0);
+            long size = Files.size(videoFile);
+            if (size <= 0 || size > maxBytes) {
+                throw new IOException("Фрагмент YouTube больше лимита загрузки (" + (maxBytes / 1024 / 1024) + " МБ).");
+            }
+            return Files.readAllBytes(videoFile);
+        } finally {
+            deleteDirectory(directory);
+        }
+    }
+
+    private static void validateYoutubeUri(URI uri) throws IOException {
+        if (!"https".equalsIgnoreCase(uri.getScheme()) || !isYoutube(uri)) {
+            throw new IOException("Для YouTube разрешены только HTTPS-ссылки с youtube.com или youtu.be.");
+        }
+    }
+
+    private static URI resolvePageMedia(byte[] htmlBytes, URI pageUri, String forcedType) throws IOException {
+        String html = new String(htmlBytes, StandardCharsets.UTF_8);
+        Map<String, List<String>> metadata = new HashMap<>();
+
+        Matcher tags = META_TAG.matcher(html);
+        while (tags.find()) {
+            Matcher attributes = HTML_ATTRIBUTE.matcher(tags.group());
+            Map<String, String> values = new HashMap<>();
+            while (attributes.find()) {
+                String key = attributes.group(1).toLowerCase(Locale.ROOT);
+                String value = attributes.group(2) != null ? attributes.group(2)
+                        : attributes.group(3) != null ? attributes.group(3)
+                        : attributes.group(4);
+                values.put(key, decodeHtmlEntities(value));
+            }
+
+            String key = values.getOrDefault("property", values.getOrDefault("name", "")).toLowerCase(Locale.ROOT);
+            String value = values.get("content");
+            if (!key.isBlank() && value != null && !value.isBlank()) {
+                metadata.computeIfAbsent(key, ignored -> new ArrayList<>()).add(value.trim());
+            }
+        }
+
+        List<URI> videoUrls = collectMetadataUrls(metadata, pageUri, List.of(
+                "og:video:secure_url",
+                "og:video",
+                "twitter:player:stream",
+                "twitter:player:stream:content_type",
+                "contenturl"
+        ));
+        List<URI> imageUrls = collectMetadataUrls(metadata, pageUri, List.of(
+                "og:image",
+                "og:image:url",
+                "twitter:image",
+                "twitter:image:src"
+        ));
+
+        boolean preferVideo = "video".equalsIgnoreCase(forcedType)
+                || ("auto".equalsIgnoreCase(forcedType) && !videoUrls.isEmpty());
+        List<URI> candidates = preferVideo ? videoUrls : imageUrls;
+        if (candidates.isEmpty() && "auto".equalsIgnoreCase(forcedType)) {
+            candidates = videoUrls;
+        }
+
+        for (URI candidate : candidates) {
+            String scheme = candidate.getScheme();
+            if (scheme != null && (scheme.equalsIgnoreCase("http") || scheme.equalsIgnoreCase("https"))) {
+                return candidate;
+            }
+        }
+
+        if ("video".equalsIgnoreCase(forcedType)) {
+            throw new IOException("На этой странице не найдена прямая ссылка og:video.");
+        }
+        throw new IOException("На этой странице не найдена прямая ссылка на изображение (og:image).");
+    }
+
+    private static List<URI> collectMetadataUrls(
+            Map<String, List<String>> metadata,
+            URI pageUri,
+            List<String> keys
+    ) {
+        List<URI> result = new ArrayList<>();
+        for (String key : keys) {
+            for (String raw : metadata.getOrDefault(key, List.of())) {
+                // A content-type meta value is not a URL.
+                if (raw.startsWith("video/") || raw.startsWith("image/")) {
+                    continue;
+                }
+                try {
+                    URI candidate = pageUri.resolve(raw.trim());
+                    if (!result.contains(candidate)) {
+                        result.add(candidate);
+                    }
+                } catch (IllegalArgumentException ignored) {
+                }
+            }
+        }
+
+        // Prefer playable MP4 over WebM/GIF when a page exposes several video assets.
+        result.sort(Comparator.comparingInt(uri -> {
+            String path = uri.getPath() == null ? "" : uri.getPath().toLowerCase(Locale.ROOT);
+            if (path.endsWith(".mp4")) return 0;
+            if (path.endsWith(".webm")) return 1;
+            if (path.endsWith(".gif")) return 2;
+            return 3;
+        }));
+        return result;
+    }
+
+    private static String decodeHtmlEntities(String value) {
+        return value.replace("&amp;", "&")
+                .replace("&quot;", "\"")
+                .replace("&#39;", "'")
+                .replace("&apos;", "'")
+                .replace("&lt;", "<")
+                .replace("&gt;", ">");
+    }
+
+    private static boolean isHtml(Download download) {
+        if (download.contentType().contains("text/html")
+                || download.contentType().contains("application/xhtml")) {
+            return true;
+        }
+        String prefix = new String(download.bytes(), 0, Math.min(download.bytes().length, 512),
+                StandardCharsets.UTF_8).stripLeading().toLowerCase(Locale.ROOT);
+        return prefix.startsWith("<!doctype html")
+                || prefix.startsWith("<html")
+                || prefix.startsWith("<head")
+                || prefix.startsWith("<meta");
     }
 
     private static Download download(URI initialUri, long maxBytes) throws IOException {
@@ -81,8 +319,8 @@ final class MediaLoader {
             connection.setInstanceFollowRedirects(false);
             connection.setConnectTimeout((int) Duration.ofSeconds(8).toMillis());
             connection.setReadTimeout((int) Duration.ofSeconds(20).toMillis());
-            connection.setRequestProperty("User-Agent", "GovernixMediaFrame/1.0");
-            connection.setRequestProperty("Accept", "image/*,video/*,application/octet-stream;q=0.8");
+            connection.setRequestProperty("User-Agent", "Mozilla/5.0 (compatible; GovernixMediaFrame/1.1)");
+            connection.setRequestProperty("Accept", "text/html,image/*,video/*,application/octet-stream;q=0.8");
 
             try {
                 int status = connection.getResponseCode();
@@ -127,7 +365,7 @@ final class MediaLoader {
                         throw new IOException("Сайт вернул пустой файл.");
                     }
                     return new Download(output.toByteArray(),
-                            contentType == null ? "" : contentType.toLowerCase(Locale.ROOT));
+                            contentType == null ? "" : contentType.toLowerCase(Locale.ROOT), current);
                 }
             } finally {
                 connection.disconnect();
@@ -209,7 +447,8 @@ final class MediaLoader {
         String lower = path.toLowerCase(Locale.ROOT);
         return lower.endsWith(".mp4") || lower.endsWith(".webm")
                 || lower.endsWith(".m4v") || lower.endsWith(".mov")
-                || lower.endsWith(".mkv") || lower.endsWith(".avi");
+                || lower.endsWith(".mkv") || lower.endsWith(".avi")
+                || lower.endsWith(".gifv");
     }
 
     private static List<BufferedImage> decodeImage(byte[] bytes, int maxFrames) throws IOException {
@@ -220,7 +459,7 @@ final class MediaLoader {
 
             Iterator<ImageReader> readers = ImageIO.getImageReaders(input);
             if (!readers.hasNext()) {
-                throw new IOException("Формат не поддерживается. Используй PNG, JPG или GIF.");
+                throw new IOException("Формат не поддерживается. Используй PNG, JPG, GIF или WebP через поддерживаемый декодер.");
             }
 
             ImageReader reader = readers.next();
@@ -314,10 +553,9 @@ final class MediaLoader {
                 throw new IOException("FFmpeg не успел обработать видео за 75 секунд.");
             }
             if (process.exitValue() != 0) {
-                String details = Files.exists(errorLog)
-                        ? Files.readString(errorLog) : "";
+                String details = Files.exists(errorLog) ? Files.readString(errorLog) : "";
                 if (details.length() > 400) {
-                    details = details.substring(0, 400);
+                    details = details.substring(details.length() - 400);
                 }
                 throw new IOException("FFmpeg не смог обработать видео. " + details);
             }
@@ -347,14 +585,7 @@ final class MediaLoader {
             }
             return frames;
         } finally {
-            try (var paths = Files.walk(directory)) {
-                paths.sorted(Comparator.reverseOrder()).forEach(path -> {
-                    try {
-                        Files.deleteIfExists(path);
-                    } catch (IOException ignored) {
-                    }
-                });
-            }
+            deleteDirectory(directory);
         }
     }
 
@@ -389,6 +620,21 @@ final class MediaLoader {
         return result;
     }
 
-    private record Download(byte[] bytes, String contentType) {
+    private static void deleteDirectory(Path directory) {
+        if (!Files.exists(directory)) {
+            return;
+        }
+        try (var paths = Files.walk(directory)) {
+            paths.sorted(Comparator.reverseOrder()).forEach(path -> {
+                try {
+                    Files.deleteIfExists(path);
+                } catch (IOException ignored) {
+                }
+            });
+        } catch (IOException ignored) {
+        }
+    }
+
+    private record Download(byte[] bytes, String contentType, URI finalUri) {
     }
 }
