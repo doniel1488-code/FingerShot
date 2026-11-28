@@ -1,0 +1,16 @@
+name: GovernixMediaFrame
+version: 1.0.0
+main: ru.governix.mediaframe.MediaFramePlugin
+api-version: '1.21'
+description: Displays images and videos on Minecraft item-frame maps.
+author: GOVERNIX
+commands:
+  mediaframe:
+    description: Display a URL on the item frame you are looking at.
+    usage: /mediaframe <url|image <url>|video <url>|clear|info>
+    aliases: [mf]
+    permission: mediaframe.use
+permissions:
+  mediaframe.use:
+    description: Allows using media frames.
+    default: op
