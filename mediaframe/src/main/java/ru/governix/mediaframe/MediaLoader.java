@@ -373,8 +373,8 @@ final class MediaLoader {
         try {
             Download response = download(URI.create(endpoint), 2L * 1024 * 1024);
             String json = new String(response.bytes(), StandardCharsets.UTF_8)
-                    .replace("\\\\/", "/")
-                    .replace("\\\\u002F", "/")
+                    .replace("\\/", "/")
+                    .replace("\\u002F", "/")
                     .replace("&amp;", "&");
             Matcher urls = JSON_URL.matcher(json);
             while (urls.find()) {
@@ -400,8 +400,8 @@ final class MediaLoader {
         try {
             Download response = download(URI.create(endpoint), 2L * 1024 * 1024);
             String json = new String(response.bytes(), StandardCharsets.UTF_8)
-                    .replace("\\\\/", "/")
-                    .replace("\\\\u002F", "/")
+                    .replace("\\/", "/")
+                    .replace("\\u002F", "/")
                     .replace("&amp;", "&");
             Matcher urls = JSON_URL.matcher(json);
             while (urls.find()) {
