@@ -164,8 +164,9 @@ final class MediaLoader {
                     ? configuredCookies
                     : pluginFolder.resolve(configuredCookies).normalize();
             if (Files.isRegularFile(cookiesPath)) {
-                command.add("--cookies");
-                command.add(cookiesPath.toAbsolutePath().toString());
+                int urlIndex = command.size() - 1;
+                command.add(urlIndex, "--cookies");
+                command.add(urlIndex + 1, cookiesPath.toAbsolutePath().toString());
             } else {
                 cookiesPath = null;
             }
@@ -175,8 +176,9 @@ final class MediaLoader {
         // are challenged. When a cookies file is supplied, yt-dlp chooses its
         // cookie-aware defaults instead.
         if (cookiesPath == null) {
-            command.add("--extractor-args");
-            command.add("youtube:player_client=tv,web_safari,web_embedded");
+            int urlIndex = command.size() - 1;
+            command.add(urlIndex, "--extractor-args");
+            command.add(urlIndex + 1, "youtube:player_client=tv,web_safari,web_embedded");
         }
 
         try {
