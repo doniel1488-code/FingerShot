@@ -248,6 +248,16 @@ final class MediaLoader {
                 "twitter:image",
                 "twitter:image:src"
         ));
+        // Imgur's og:image often has a Facebook preview query (?fb) that redirects
+        // to an HTML landing page. Prefer its twitter:image CDN thumbnail instead.
+        if (pageUri.getHost() != null
+                && pageUri.getHost().toLowerCase(Locale.ROOT).endsWith("imgur.com")) {
+            List<URI> twitterImages = collectMetadataUrls(metadata, pageUri,
+                    List.of("twitter:image", "twitter:image:src"));
+            if (!twitterImages.isEmpty()) {
+                imageUrls = twitterImages;
+            }
+        }
 
         // Some CDN pages expose their real assets only inside embedded JSON,
         // not as ordinary HTML meta tags. Normalize escaped URLs and scan them too.
@@ -475,8 +485,20 @@ final class MediaLoader {
             connection.setInstanceFollowRedirects(false);
             connection.setConnectTimeout((int) Duration.ofSeconds(8).toMillis());
             connection.setReadTimeout((int) Duration.ofSeconds(20).toMillis());
-            connection.setRequestProperty("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36");
-            connection.setRequestProperty("Accept", "text/html,application/xhtml+xml,image/avif,image/webp,image/*,video/*,application/octet-stream;q=0.8");
+            connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36");
+            boolean mediaRequest = isImageAsset(current) || isVideoAsset(current);
+            if (mediaRequest) {
+                connection.setRequestProperty("Accept",
+                        "image/avif,image/webp,image/apng,image/*,video/*,application/octet-stream;q=0.8,*/*;q=0.5");
+                connection.setRequestProperty("Sec-Fetch-Dest", isVideoAsset(current) ? "video" : "image");
+            } else {
+                connection.setRequestProperty("Accept",
+                        "text/html,application/xhtml+xml,image/avif,image/webp,image/*,video/*,application/octet-stream;q=0.8");
+            }
+            if (current.getHost() != null
+                    && current.getHost().toLowerCase(Locale.ROOT).endsWith("imgur.com")) {
+                connection.setRequestProperty("Referer", "https://imgur.com/");
+            }
             connection.setRequestProperty("Accept-Language", "en-US,en;q=0.9");
 
             try {
