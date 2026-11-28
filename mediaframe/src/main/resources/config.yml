@@ -7,6 +7,9 @@ target-distance: 8.0
 # Путь к FFmpeg. Можно указать полный путь к исполняемому файлу.
 ffmpeg-path: ffmpeg
 
+# Путь к yt-dlp. Нужен для ссылок на YouTube.
+yt-dlp-path: yt-dlp
+
 # Частота кадров видео на карте. Реальное обновление ограничено частотой отправки map-пакетов Minecraft.
 video-fps: 6
 
