@@ -41,6 +41,10 @@ final class MediaLoader {
     private static final Pattern EMBEDDED_MEDIA_URL = Pattern.compile(
             "(?i)https?://[^\\s\\\"'<>\\\\]+?\\.(?:mp4|webm|gif|png|jpe?g)(?:\\?[^\\s\\\"'<>\\\\]*)?"
     );
+    private static final Pattern TENOR_ID = Pattern.compile("(?i)-gif-(\\d+)(?:$|[/?#])");
+    private static final Pattern JSON_URL = Pattern.compile(
+            "(?i)https?://[^\\s\\\"'<>\\\\]+?\\.(?:mp4|webm|gif|png|jpe?g)(?:\\?[^\\s\\\"'<>\\\\]*)?"
+    );
 
     private MediaLoader() {
     }
@@ -286,6 +290,21 @@ final class MediaLoader {
             }
         }
 
+        // Tenor can return a shell page without metadata to non-browser clients.
+        // Its public GIF lookup endpoint is a fallback when a share page omits asset tags.
+        if (videoUrls.isEmpty() && imageUrls.isEmpty()
+                && pageUri.getHost() != null
+                && pageUri.getHost().toLowerCase(Locale.ROOT).endsWith("tenor.com")) {
+            resolveTenorApi(pageUri, videoUrls, imageUrls);
+        }
+
+        // Imgur's oEmbed endpoint is a fallback for gallery pages whose HTML hides OG metadata.
+        if (videoUrls.isEmpty() && imageUrls.isEmpty()
+                && pageUri.getHost() != null
+                && pageUri.getHost().toLowerCase(Locale.ROOT).endsWith("imgur.com")) {
+            resolveImgurOembed(pageUri, videoUrls, imageUrls);
+        }
+
         boolean preferVideo = "video".equalsIgnoreCase(forcedType)
                 || ("auto".equalsIgnoreCase(forcedType) && !videoUrls.isEmpty());
         List<URI> candidates = preferVideo ? videoUrls : imageUrls;
@@ -337,6 +356,68 @@ final class MediaLoader {
             return 3;
         }));
         return result;
+    }
+
+    private static void resolveTenorApi(
+            URI pageUri,
+            List<URI> videoUrls,
+            List<URI> imageUrls
+    ) {
+        Matcher idMatcher = TENOR_ID.matcher(pageUri.getPath() == null ? "" : pageUri.getPath());
+        if (!idMatcher.find()) {
+            return;
+        }
+
+        String endpoint = "https://g.tenor.com/v1/gifs?ids=" + idMatcher.group(1)
+                + "&key=LIVDSRZULELA&media_filter=basic";
+        try {
+            Download response = download(URI.create(endpoint), 2L * 1024 * 1024);
+            String json = new String(response.bytes(), StandardCharsets.UTF_8)
+                    .replace("\\\\/", "/")
+                    .replace("\\\\u002F", "/")
+                    .replace("&amp;", "&");
+            Matcher urls = JSON_URL.matcher(json);
+            while (urls.find()) {
+                URI candidate = URI.create(urls.group());
+                if (isVideoAsset(candidate) && !videoUrls.contains(candidate)) {
+                    videoUrls.add(candidate);
+                } else if (isImageAsset(candidate) && !imageUrls.contains(candidate)) {
+                    imageUrls.add(candidate);
+                }
+            }
+        } catch (Exception ignored) {
+            // Keep the original, more useful "no media URL" error if the fallback is unavailable.
+        }
+    }
+
+    private static void resolveImgurOembed(
+            URI pageUri,
+            List<URI> videoUrls,
+            List<URI> imageUrls
+    ) {
+        String encoded = java.net.URLEncoder.encode(pageUri.toString(), StandardCharsets.UTF_8);
+        String endpoint = "https://api.imgur.com/oembed.json?url=" + encoded;
+        try {
+            Download response = download(URI.create(endpoint), 2L * 1024 * 1024);
+            String json = new String(response.bytes(), StandardCharsets.UTF_8)
+                    .replace("\\\\/", "/")
+                    .replace("\\\\u002F", "/")
+                    .replace("&amp;", "&");
+            Matcher urls = JSON_URL.matcher(json);
+            while (urls.find()) {
+                URI candidate = URI.create(urls.group());
+                String host = candidate.getHost() == null ? "" : candidate.getHost().toLowerCase(Locale.ROOT);
+                if (host.endsWith("imgur.com")) {
+                    if (isVideoAsset(candidate) && !videoUrls.contains(candidate)) {
+                        videoUrls.add(candidate);
+                    } else if (isImageAsset(candidate) && !imageUrls.contains(candidate)) {
+                        imageUrls.add(candidate);
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+            // Keep the original, more useful "no media URL" error if the fallback is unavailable.
+        }
     }
 
     private static boolean isVideoAsset(URI uri) {
