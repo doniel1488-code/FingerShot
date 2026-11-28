@@ -56,6 +56,7 @@ final class MediaLoader {
             String ffmpegPath,
             String ytDlpPath,
             String denoPath,
+            String youtubeCookiesFile,
             Path pluginFolder,
             int videoFps,
             int maxVideoSeconds,
@@ -76,7 +77,7 @@ final class MediaLoader {
             String actualYtDlp = BinaryManager.ensureYtDlp(ytDlpPath, pluginFolder);
             String actualDeno = BinaryManager.ensureDeno(denoPath, pluginFolder);
             byte[] videoBytes = downloadYoutube(uri, maxBytes, actualFfmpeg,
-                    actualYtDlp, actualDeno, maxVideoSeconds);
+                    actualYtDlp, actualDeno, youtubeCookiesFile, pluginFolder, maxVideoSeconds);
             return decodeVideo(videoBytes, actualFfmpeg, videoFps, maxVideoSeconds, maxVideoFrames);
         }
 
@@ -126,6 +127,8 @@ final class MediaLoader {
             String ffmpegPath,
             String ytDlpPath,
             String denoPath,
+            String youtubeCookiesFile,
+            Path pluginFolder,
             int maxSeconds
     ) throws IOException {
         validateYoutubeUri(uri);
@@ -153,6 +156,28 @@ final class MediaLoader {
                 "--output", outputTemplate,
                 uri.toString()
         ));
+
+        Path cookiesPath = null;
+        if (youtubeCookiesFile != null && !youtubeCookiesFile.isBlank()) {
+            Path configuredCookies = Path.of(youtubeCookiesFile);
+            cookiesPath = configuredCookies.isAbsolute()
+                    ? configuredCookies
+                    : pluginFolder.resolve(configuredCookies).normalize();
+            if (Files.isRegularFile(cookiesPath)) {
+                command.add("--cookies");
+                command.add(cookiesPath.toAbsolutePath().toString());
+            } else {
+                cookiesPath = null;
+            }
+        }
+
+        // Try clients that may remain accessible when the default player clients
+        // are challenged. When a cookies file is supplied, yt-dlp chooses its
+        // cookie-aware defaults instead.
+        if (cookiesPath == null) {
+            command.add("--extractor-args");
+            command.add("youtube:player_client=tv,web_safari,web_embedded");
+        }
 
         try {
             Process process;
@@ -190,6 +215,13 @@ final class MediaLoader {
                 String details = Files.exists(errorLog) ? Files.readString(errorLog) : "";
                 if (details.length() > 500) {
                     details = details.substring(details.length() - 500);
+                }
+                if (details.contains("Sign in to confirm you're not a bot")
+                        || details.contains("LOGIN_REQUIRED")) {
+                    throw new IOException("YouTube блокирует запросы с IP сервера проверкой «не бот». "
+                            + "Положи Netscape cookies.txt в plugins/GovernixMediaFrame/ и укажи "
+                            + "youtube-cookies-file: cookies.txt в config.yml. "
+                            + "Без cookies YouTube может запрещать скачивание на дата-центровых IP. " + details);
                 }
                 throw new IOException("Не удалось получить видео с YouTube. Проверь доступность ролика и установку yt-dlp/FFmpeg. " + details);
             }
