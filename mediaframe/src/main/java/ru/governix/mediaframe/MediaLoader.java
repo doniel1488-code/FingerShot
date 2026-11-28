@@ -48,6 +48,7 @@ final class MediaLoader {
             long maxBytes,
             String ffmpegPath,
             String ytDlpPath,
+            Path pluginFolder,
             int videoFps,
             int maxVideoSeconds,
             int maxVideoFrames,
@@ -63,8 +64,12 @@ final class MediaLoader {
         // YouTube does not expose a normal direct MP4 URL on its watch page.
         // yt-dlp downloads only the configured first segment; FFmpeg then turns it into map frames.
         if (isYoutube(uri)) {
-            byte[] videoBytes = downloadYoutube(uri, maxBytes, ffmpegPath, ytDlpPath, maxVideoSeconds);
-            return decodeVideo(videoBytes, ffmpegPath, videoFps, maxVideoSeconds, maxVideoFrames);
+            String actualFfmpeg = BinaryManager.ensureFfmpeg(ffmpegPath, pluginFolder);
+            String actualYtDlp = BinaryManager.ensureYtDlp(ytDlpPath, pluginFolder);
+            String denoPath = BinaryManager.ensureDeno("deno", pluginFolder);
+            byte[] videoBytes = downloadYoutube(uri, maxBytes, actualFfmpeg,
+                    actualYtDlp, denoPath, maxVideoSeconds);
+            return decodeVideo(videoBytes, actualFfmpeg, videoFps, maxVideoSeconds, maxVideoFrames);
         }
 
         Download download = download(uri, maxBytes);
@@ -86,7 +91,8 @@ final class MediaLoader {
                 || ("auto".equalsIgnoreCase(forcedType) && isVideo(download.contentType(), mediaUri));
 
         if (video) {
-            return decodeVideo(download.bytes(), ffmpegPath, videoFps,
+            String actualFfmpeg = BinaryManager.ensureFfmpeg(ffmpegPath, pluginFolder);
+            return decodeVideo(download.bytes(), actualFfmpeg, videoFps,
                     maxVideoSeconds, maxVideoFrames);
         }
 
@@ -111,6 +117,7 @@ final class MediaLoader {
             long maxBytes,
             String ffmpegPath,
             String ytDlpPath,
+            String denoPath,
             int maxSeconds
     ) throws IOException {
         validateYoutubeUri(uri);
@@ -125,22 +132,19 @@ final class MediaLoader {
                 "--no-warnings",
                 "--no-progress",
                 "--quiet",
-                "--socket-timeout", "15",
-                "--retries", "2",
-                "--fragment-retries", "2",
+                "--socket-timeout", "20",
+                "--retries", "3",
+                "--fragment-retries", "3",
+                "--js-runtimes", "deno:" + denoPath,
+                "--remote-components", "ejs:github",
+                "--ffmpeg-location", ffmpegPath,
                 "--download-sections", "*0:" + Math.max(1, maxSeconds),
                 "--force-keyframes-at-cuts",
                 "--format", "bv*[height<=480]+ba/b[height<=480]/bv*+ba/b",
-                "--merge-output-format", "mp4/mkv",
+                "--merge-output-format", "mkv",
                 "--output", outputTemplate,
                 uri.toString()
         ));
-        // By default yt-dlp finds ffmpeg/ffprobe on PATH. Only pass a location
-        // when the administrator configured a non-default executable/path.
-        if (ffmpegPath != null && !ffmpegPath.isBlank() && !"ffmpeg".equals(ffmpegPath)) {
-            command.add(1, "--ffmpeg-location");
-            command.add(2, ffmpegPath);
-        }
 
         try {
             Process process;
@@ -150,12 +154,12 @@ final class MediaLoader {
                         .redirectError(errorLog.toFile())
                         .start();
             } catch (IOException exception) {
-                throw new IOException("YouTube требует yt-dlp. Установи yt-dlp на сервер и укажи yt-dlp-path в config.yml.", exception);
+                throw new IOException("Не удалось запустить автоматически установленный yt-dlp: " + exception.getMessage(), exception);
             }
 
             boolean finished;
             try {
-                finished = process.waitFor(150, TimeUnit.SECONDS);
+                finished = process.waitFor(240, TimeUnit.SECONDS);
             } catch (InterruptedException exception) {
                 Thread.currentThread().interrupt();
                 process.destroyForcibly();
@@ -164,7 +168,7 @@ final class MediaLoader {
 
             if (!finished) {
                 process.destroyForcibly();
-                throw new IOException("yt-dlp не успел получить видео за 150 секунд.");
+                throw new IOException("yt-dlp не успел получить видео за 240 секунд.");
             }
 
             List<Path> outputs;
@@ -225,16 +229,58 @@ final class MediaLoader {
         List<URI> videoUrls = collectMetadataUrls(metadata, pageUri, List.of(
                 "og:video:secure_url",
                 "og:video",
+                "ogvideo",
                 "twitter:player:stream",
-                "twitter:player:stream:content_type",
                 "contenturl"
         ));
         List<URI> imageUrls = collectMetadataUrls(metadata, pageUri, List.of(
                 "og:image",
                 "og:image:url",
+                "ogimage",
                 "twitter:image",
                 "twitter:image:src"
         ));
+
+        // Some CDN pages expose their real assets only inside embedded JSON,
+        // not as ordinary HTML meta tags. Normalize escaped URLs and scan them too.
+        String searchableHtml = html
+                .replace("\\/", "/")
+                .replace("\\u002F", "/")
+                .replace("\\u003A", ":")
+                .replace("&amp;", "&")
+                .replace("&#x2F;", "/")
+                .replace("&#47;", "/");
+        Matcher embedded = EMBEDDED_MEDIA_URL.matcher(searchableHtml);
+        while (embedded.find()) {
+            try {
+                URI candidate = URI.create(embedded.group());
+                String host = candidate.getHost() == null ? "" : candidate.getHost().toLowerCase(Locale.ROOT);
+                if (host.endsWith("tenor.com") || host.endsWith("imgur.com")) {
+                    if (isVideoAsset(candidate)) {
+                        if (!videoUrls.contains(candidate)) videoUrls.add(candidate);
+                    } else if (isImageAsset(candidate)) {
+                        if (!imageUrls.contains(candidate)) imageUrls.add(candidate);
+                    }
+                }
+            } catch (IllegalArgumentException ignored) {
+            }
+        }
+
+        // Tenor and Imgur may publish their CDN URL as og:url/contentUrl rather
+        // than as a conventional og:video/og:image field.
+        for (String key : List.of("og:url", "ogurl", "url")) {
+            for (String raw : metadata.getOrDefault(key, List.of())) {
+                try {
+                    URI candidate = pageUri.resolve(decodeHtmlEntities(raw));
+                    String host = candidate.getHost() == null ? "" : candidate.getHost().toLowerCase(Locale.ROOT);
+                    if (host.endsWith("tenor.com") || host.endsWith("imgur.com")) {
+                        if (isVideoAsset(candidate) && !videoUrls.contains(candidate)) videoUrls.add(candidate);
+                        if (isImageAsset(candidate) && !imageUrls.contains(candidate)) imageUrls.add(candidate);
+                    }
+                } catch (IllegalArgumentException ignored) {
+                }
+            }
+        }
 
         boolean preferVideo = "video".equalsIgnoreCase(forcedType)
                 || ("auto".equalsIgnoreCase(forcedType) && !videoUrls.isEmpty());
@@ -289,13 +335,32 @@ final class MediaLoader {
         return result;
     }
 
+    private static boolean isVideoAsset(URI uri) {
+        String path = uri.getPath();
+        if (path == null) return false;
+        String lower = path.toLowerCase(Locale.ROOT);
+        return lower.endsWith(".mp4") || lower.endsWith(".webm") || lower.endsWith(".m4v")
+                || lower.endsWith(".mov") || lower.endsWith(".mkv") || lower.endsWith(".avi");
+    }
+
+    private static boolean isImageAsset(URI uri) {
+        String path = uri.getPath();
+        if (path == null) return false;
+        String lower = path.toLowerCase(Locale.ROOT);
+        return lower.endsWith(".gif") || lower.endsWith(".png") || lower.endsWith(".jpg")
+                || lower.endsWith(".jpeg") || lower.endsWith(".webp");
+    }
+
     private static String decodeHtmlEntities(String value) {
         return value.replace("&amp;", "&")
                 .replace("&quot;", "\"")
                 .replace("&#39;", "'")
                 .replace("&apos;", "'")
                 .replace("&lt;", "<")
-                .replace("&gt;", ">");
+                .replace("&gt;", ">")
+                .replace("\\/", "/")
+                .replace("\\u002F", "/")
+                .replace("\\u003A", ":");
     }
 
     private static boolean isHtml(Download download) {
@@ -325,8 +390,9 @@ final class MediaLoader {
             connection.setInstanceFollowRedirects(false);
             connection.setConnectTimeout((int) Duration.ofSeconds(8).toMillis());
             connection.setReadTimeout((int) Duration.ofSeconds(20).toMillis());
-            connection.setRequestProperty("User-Agent", "Mozilla/5.0 (compatible; GovernixMediaFrame/1.1)");
-            connection.setRequestProperty("Accept", "text/html,image/*,video/*,application/octet-stream;q=0.8");
+            connection.setRequestProperty("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36");
+            connection.setRequestProperty("Accept", "text/html,application/xhtml+xml,image/avif,image/webp,image/*,video/*,application/octet-stream;q=0.8");
+            connection.setRequestProperty("Accept-Language", "en-US,en;q=0.9");
 
             try {
                 int status = connection.getResponseCode();
