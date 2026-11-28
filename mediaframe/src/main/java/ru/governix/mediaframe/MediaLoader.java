@@ -211,7 +211,7 @@ final class MediaLoader {
         }
     }
 
-    private static URI resolvePageMedia(byte[] htmlBytes, URI pageUri, String forcedType) throws IOException {
+    static URI resolvePageMedia(byte[] htmlBytes, URI pageUri, String forcedType) throws IOException {
         String html = new String(htmlBytes, StandardCharsets.UTF_8);
         Map<String, List<String>> metadata = new HashMap<>();
 
