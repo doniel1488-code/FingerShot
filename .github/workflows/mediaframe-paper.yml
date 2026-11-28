@@ -24,8 +24,10 @@ jobs:
           java-version: '21'
           cache: maven
           cache-dependency-path: mediaframe/pom.xml
-      - name: Build JAR
+      - name: Build and test JAR
         working-directory: mediaframe
+        env:
+          MEDIAFRAME_TEST_PROVISIONING: 'true'
         run: mvn --batch-mode --no-transfer-progress clean package
       - name: Upload plugin JAR
         uses: actions/upload-artifact@v4
