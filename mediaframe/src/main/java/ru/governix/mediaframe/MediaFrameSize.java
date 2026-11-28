@@ -6,13 +6,13 @@ import java.util.regex.Pattern;
 public record MediaFrameSize(int width, int height) {
     private static final Pattern SIZE_PATTERN = Pattern.compile("(?i)^(\\d+)[xх](\\d+)$");
     public static final int MAX_SIDE = 5;
-    public static final int MAX_TILES = 15;
+    public static final int MAX_TILES = 25;
 
     public MediaFrameSize {
         if (width < 1 || width > MAX_SIDE || height < 1 || height > MAX_SIDE
                 || (long) width * height > MAX_TILES) {
             throw new IllegalArgumentException(
-                    "Размер должен быть от 1x1 до 5x5, но не более 15 рамок (например, 5x3 или 3x4)."
+                    "Размер должен быть от 1x1 до 5x5, но не более 25 рамок (например, 5x3 или 3x4)."
             );
         }
     }

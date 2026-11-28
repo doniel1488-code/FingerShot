@@ -18,7 +18,7 @@ Automatic tool setup supports Linux x86_64 and Linux ARM64. On other operating s
 
 Place a rectangular grid of empty item frames on a flat wall. All frames must face the same direction and have the same rotation. Look at the **top-left frame** (from the point of view of someone looking at the wall) and run the command with the desired width and height.
 
-Each block is one 128×128 map tile. The plugin renders the complete image at the combined resolution first, then crops it into tiles. For example:
+Each block is one 128×128 map tile. Up to 25 tiles (5×5) are supported. The plugin renders the complete image at the combined resolution first, then crops it into tiles. For example:
 
 | Grid | Combined resolution |
 |---|---:|
@@ -27,7 +27,7 @@ Each block is one 128×128 map tile. The plugin renders the complete image at th
 | 3x4 | 384×512 |
 | 5x3 | 640×384 |
 
-Supported dimensions are 1–5 on each side, with a maximum of **15 frames per screen**. The image is fitted proportionally into the requested canvas; it is not stretched. A source image with too little resolution cannot gain real detail from upscaling.
+Supported dimensions are 1–5 on each side, with a maximum of **25 frames per screen (5x5)**. The image is fitted proportionally into the requested canvas; it is not stretched. A source image with too little resolution cannot gain real detail from upscaling.
 
 ## Commands
 
@@ -56,7 +56,7 @@ YouTube extraction uses yt-dlp with Deno's JavaScript runtime and the yt-dlp EJS
 
 ## Video limitations
 
-Minecraft maps are 128×128 pixels and are not a native video surface. Video frames are decoded at the combined screen resolution, and every tile uses one shared playback clock so the whole image changes in sync. The default is 6 FPS and a maximum clip length of 30 seconds / 180 decoded frames (subject to the 128 MiB decoded-frame memory limit). The actual visible update rate is also limited by Minecraft map packet updates and client rendering.
+Minecraft maps are 128×128 pixels and are not a native video surface. Video frames are decoded at the combined screen resolution, and every tile uses one shared playback clock so the whole image changes in sync. The default is 20 FPS (the practical ceiling for the Bukkit MapRenderer path at the server's standard 20 TPS) and a maximum clip length of 30 seconds / 180 decoded frames (subject to the 128 MiB decoded-frame memory limit). The actual visible update rate is also limited by Minecraft map packet updates and client rendering.
 
 For YouTube, only the first configured `max-video-seconds` are downloaded (30 seconds by default, configurable up to 120 seconds). The plugin does not fetch the entire long-form video. Audio is not played through the map.
 
@@ -68,9 +68,9 @@ For YouTube, only the first configured `max-video-seconds` are downloaded (30 se
 - `yt-dlp-path`: optional yt-dlp executable or PATH command (default `yt-dlp`); otherwise auto-installed on supported Linux.
 - `deno-path`: optional Deno executable or PATH command (default `deno`); otherwise auto-installed for YouTube on supported Linux.
 - `youtube-cookies-file`: optional Netscape-format YouTube cookies file (default `cookies.txt`).
-- `video-fps`: requested map frame rate (default 6).
+- `video-fps`: requested map frame rate (default 20, maximum 20 with the Bukkit map renderer).
 - `max-video-seconds`: maximum video clip length (default 30, plugin maximum 120).
-- `max-video-frames`: maximum decoded video frames (default 180, also capped by memory).
+- `max-video-frames`: maximum decoded video frames (default 180, also capped by memory). Existing 1.3.0 configs with the untouched 6 FPS default are migrated to 20 FPS; custom values are preserved.
 - `max-image-frames`: maximum decoded GIF frames (default 120, also capped by memory).
 
 ## Safety and limits

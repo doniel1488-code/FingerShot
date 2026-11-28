@@ -59,6 +59,7 @@ public final class MediaFramePlugin extends JavaPlugin implements Listener {
     @Override
     public void onEnable() {
         saveDefaultConfig();
+        migrateConfig();
         urlKey = new NamespacedKey(this, "media_url");
         typeKey = new NamespacedKey(this, "media_type");
         groupKey = new NamespacedKey(this, "media_group");
@@ -86,7 +87,21 @@ public final class MediaFramePlugin extends JavaPlugin implements Listener {
             }
         });
 
-        getLogger().info("GovernixMediaFrame 1.3.0 включён для Paper 1.21.11.");
+        getLogger().info("GovernixMediaFrame 1.3.1 включён для Paper 1.21.11 (до 20 кадров/с через Bukkit MapRenderer).");
+    }
+
+    private void migrateConfig() {
+        int configVersion = getConfig().getInt("config-version", 1);
+        if (configVersion < 2) {
+            // Previous releases shipped with 6 FPS as their default.
+            // Raise only that untouched default; preserve custom FPS values.
+            if (getConfig().getInt("video-fps", 6) == 6) {
+                getConfig().set("video-fps", 20);
+            }
+            getConfig().set("config-version", 2);
+            saveConfig();
+            getLogger().info("Конфигурация обновлена: стандартная частота видео теперь 20 FPS.");
+        }
     }
 
     @Override
@@ -163,7 +178,7 @@ public final class MediaFramePlugin extends JavaPlugin implements Listener {
         String ytDlpPath = getConfig().getString("yt-dlp-path", "yt-dlp");
         String denoPath = getConfig().getString("deno-path", "deno");
         String cookiesFile = getConfig().getString("youtube-cookies-file", "cookies.txt");
-        int fps = clamp(getConfig().getInt("video-fps", 6), 1, 20);
+        int fps = clamp(getConfig().getInt("video-fps", 20), 1, 20);
         int maxVideoSeconds = clamp(getConfig().getInt("max-video-seconds", 30), 1, 120);
         int maxVideoFrames = clamp(getConfig().getInt("max-video-frames", 180), 1, 600);
         int maxImageFrames = clamp(getConfig().getInt("max-image-frames", 120), 1, 240);

@@ -73,7 +73,7 @@ final class MediaLoader {
         }
 
         if (tileColumns < 1 || tileRows < 1 || tileColumns > 5 || tileRows > 5
-                || (long) tileColumns * tileRows > 15) {
+                || (long) tileColumns * tileRows > 25) {
             throw new IOException("Недопустимый размер сетки медиа.");
         }
         int canvasWidth = tileColumns * MAP_SIZE;

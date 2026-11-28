@@ -118,7 +118,7 @@ public final class MediaFrameCommand implements CommandExecutor, TabCompleter {
         player.sendMessage("§e/" + label + " image <url> [ширинаxвысота] §7— изображение/GIF");
         player.sendMessage("§e/" + label + " video <url> [ширинаxвысота] §7— видео");
         player.sendMessage("§eПримеры: §f/mf <url> 3x3 §7или §f/mf video <url> 5x3");
-        player.sendMessage("§eРазмер: от 1x1 до 5x3 (не более 15 рамок).");
+        player.sendMessage("§eРазмер: от 1x1 до 5x5 (не более 25 рамок).");
         player.sendMessage("§eПеред загрузкой поставь пустую сетку и целься в её верхнюю левую рамку.");
         player.sendMessage("§e/" + label + " clear §7— очистить всю сетку");
         player.sendMessage("§e/" + label + " info §7— информация о медиа");

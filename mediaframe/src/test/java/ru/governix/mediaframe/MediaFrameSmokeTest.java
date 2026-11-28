@@ -85,11 +85,18 @@ public final class MediaFrameSmokeTest {
         assertEquals(384, fitted.getWidth(), "fitted canvas width");
         assertEquals(512, fitted.getHeight(), "fitted canvas height");
 
+        MediaFrameSize full = MediaFrameSize.parse("5x5");
+        assertEquals(640, full.pixelWidth(), "5x5 canvas width");
+        assertEquals(640, full.pixelHeight(), "5x5 canvas height");
+
+        MediaFrameSize sixteen = MediaFrameSize.parse("4x4");
+        assertEquals(16, sixteen.width() * sixteen.height(), "4x4 frame count");
+
         try {
-            MediaFrameSize.parse("4x4");
-            throw new AssertionError("A 16-frame screen must be rejected.");
+            MediaFrameSize.parse("6x1");
+            throw new AssertionError("A screen wider than five frames must be rejected.");
         } catch (IllegalArgumentException expected) {
-            // The configured limit is 15 map tiles per screen.
+            // No side may exceed five frames.
         }
     }
 
