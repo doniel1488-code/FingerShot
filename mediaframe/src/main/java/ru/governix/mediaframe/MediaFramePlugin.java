@@ -99,6 +99,8 @@ public final class MediaFramePlugin extends JavaPlugin implements Listener {
                             maxBytes,
                             getConfig().getString("ffmpeg-path", "ffmpeg"),
                             getConfig().getString("yt-dlp-path", "yt-dlp"),
+                            getConfig().getString("deno-path", "deno"),
+                            getDataFolder().toPath(),
                             clamp(getConfig().getInt("video-fps", 6), 1, 20),
                             clamp(getConfig().getInt("max-video-seconds", 30), 1, 120),
                             clamp(getConfig().getInt("max-video-frames", 180), 1, 600),
